@@ -9,8 +9,6 @@ https://github.com/Nesvilab/philosopher/wiki/Simple-Data-Analysis
 
 process WORKSPACE {
 
-    echo true
-
     label 'philosopher'
 
     input:
@@ -22,20 +20,17 @@ process WORKSPACE {
     script:
     """
     # new logic to make workspace work without manually moving in files
-    mv ${params.workspace}/../data/small_peptides/* ${params.workspace}/
+    mzML_dir=${params.proteomics_reads}
+    parentdir_mzML="\$(dirname "\$mzML_dir")"
+
+    mv \${parentdir_mzML}/* ${params.workspace}/
 
     # initialize philosopher workspace in workspace
     cd ${params.workspace}
     philosopher workspace --clean
     philosopher workspace --init
 
-    mzML_dir=${params.proteomics_reads}
-    parentdir_mzML="\$(dirname "\$mzML_dir")"
     cp *.mzML \$parentdir_mzML
-
-    db_dir=${params.philosopher_db}
-    parentdir_db="\$(dirname "\$db_dir")"
-    cp *.fasta \$parentdir_db
     """
 
 }
@@ -300,9 +295,16 @@ process CLEAN_UP_WORKSPACE {
     script:
     """
     cd ${params.workspace}
+    
+    cd ..
+    ln workspace/simple_data_analysis.nf ./
+    rm -rf workspace
+    mkdir -p workspace
+    mv simple_data_analysis.nf workspace/
 
     """
 
+}
 
 workflow PHILOSOPHER_PIPE {
 
@@ -316,7 +318,7 @@ workflow PHILOSOPHER_PIPE {
     main:
       workspace_obj = WORKSPACE(riboseq_ch)
       db_obj = DATABASE(workspace_obj, db_ch)
-      change_obj = GENERATEPARAMS(db_obj, change_file_script_ch)
+      change_obj = GENERATE_CHANGE_PARAMS(db_obj, change_file_script_ch)
       //change_obj = CHANGEFILE(db_obj, params_obj, change_file_script_ch)
       pepXML_obj = MSFRAGGER(input_ch.collect(), change_obj, db_obj)
       pepdotxml_obj = PEPTIDEPROPHET(db_obj, pepXML_obj)
@@ -324,6 +326,7 @@ workflow PHILOSOPHER_PIPE {
       filter_obj = FILTERANDFDR(pepdotxml_obj, protXML_obj)
       quant_obj = QUANTIFY(filter_obj)
       report_obj = REPORT(quant_obj)
+      CLEAN_UP_WORKSPACE(report_obj)
 
     emit:
       report_obj
