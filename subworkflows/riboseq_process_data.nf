@@ -207,7 +207,8 @@ process MAP_TO_OTHER_GENES_SEGEMEHL {
 	--accuracy ${params.map_to_other_genes_accuracy} \
 	--threads ${params.map_to_other_genes_threads} \
 	-o \${prefix}.other_genes_mapped_sam \
-	-u \${prefix}.other_genes_unmapped &> \${prefix}_map_to_other_genes.log
+	-u \${prefix}.other_genes_unmapped \
+	&> \${prefix}_map_to_other_genes.log
 	
     """
 
@@ -330,6 +331,7 @@ process MAP_TO_TRANSCRIPTS_STAR {
     input:
     each(path(reads))
     path index
+    path gtf
 
     output:
     path '*.Aligned.out.sam'
@@ -343,6 +345,16 @@ process MAP_TO_TRANSCRIPTS_STAR {
         input=\$(basename \$VAR)
         prefix=\$(echo \$input | cut -d '.' -f 1)
 
+	STAR --runThreadN 12 \
+		--genomeDir ${index} \
+		--sjdbGTFfile ${gtf} \
+		--outSAMattributes All \
+		--quantMode GeneCounts \
+		--outSAMtype BAM SortedByCoordinate \
+		--readFilesIn \$VAR \
+		--outFileNamePrefix \${prefix}.
+
+	: '
 	STAR --runThreadN ${params.map_to_transcripts_threads} \
                 --genomeDir ${index} \
                 --outFileNamePrefix \${prefix}. \
@@ -355,6 +367,7 @@ process MAP_TO_TRANSCRIPTS_STAR {
 		--alignIntronMax 20000 \
 		--outMultimapperOrder Random \
 		--outSAMmultNmax 1
+	'
 
 	mv *.Unmapped.out.* \${prefix}.unmapped
 
@@ -397,7 +410,8 @@ process SAM2BAM_SORT_AND_INDEX {
     publishDir "${params.riboseq_process_data_outDir}/sam2bam_sort_and_index", mode: 'copy'
 
     input:
-    path sam
+    //path sam
+    path bam
 
     output:
     path '*.transcripts_mapped_unique_sorted_bam'
@@ -409,6 +423,13 @@ process SAM2BAM_SORT_AND_INDEX {
     input=\$(basename ${sam})
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
+
+    samtools index ${bam}
+
+    mkdir \${prefix}.sam2bam
+    cp \${prefix}.transcripts* \${prefix}.sam2bam
+
+    : '
     samtools view -bS ${sam} \
 	| samtools sort - > \${prefix}.transcripts_mapped_unique_sorted_bam; \
 	samtools index \${prefix}.transcripts_mapped_unique_sorted_bam; \
@@ -416,6 +437,7 @@ process SAM2BAM_SORT_AND_INDEX {
 
     mkdir \${prefix}.sam2bam
     cp \${prefix}.transcripts* \${prefix}.sam2bam
+    '
     """
 
 }
@@ -669,6 +691,7 @@ workflow RIBOSEQ_PROCESS_DATA_PIPE {
       count_reads_script_ch
       check_periodicity_script_ch
       filter_reads_based_on_read_lengths_and_offsets_script_ch
+      gtf_ch
 
     main:
       if ( params.run_count_oligos == "true" ) {
@@ -683,48 +706,64 @@ workflow RIBOSEQ_PROCESS_DATA_PIPE {
       pro_filtered_fastq = FILTER_READS(pro_trimmed_fastq)
       pro_filtered_fasta = FASTQ_TO_FASTA(pro_filtered_fastq)
 
-      if ( params.aligner_mode == "segemehl" ) {
-          (other_genes_mapped_sam, other_genes_unmapped_sam) = MAP_TO_OTHER_GENES_SEGEMEHL(  pro_filtered_fasta,
+      if ( params.aligner_other_genes == "segemehl" ) {
+	  (other_genes_mapped_sam, other_genes_unmapped_fasta) = MAP_TO_OTHER_GENES_SEGEMEHL(  pro_filtered_fasta,
 											     other_RNAs_index_ch,
 											     other_RNAs_sequence_ch  )
-      }
+}
 
-      if ( params.aligner_mode == "star" ) {
-	  (other_genes_mapped_sam, other_genes_unmapped_sam) = MAP_TO_OTHER_GENES_STAR(  pro_filtered_fasta,
-											 other_RNAs_index_ch  )
-											 //other_RNAs_sequence_ch)
+
+      if ( params.aligner_other_genes == "star" ) {
+	  (other_genes_mapped_sam, other_genes_unmapped_fasta) = MAP_TO_OTHER_GENES_STAR(  pro_filtered_fasta,
+											   other_RNAs_index_ch  )
       }
 
       overrepresented_sequences_other = COUNT_OVERREPRESENTED_SEQUENCES_OTHER(  other_genes_mapped_sam,
 										find_overrepresented_sequences_script_ch  )
 
-      if ( params.aligner_mode == "segemehl" ) {
-          (transcripts_mapped_sam, transcripts_unmapped_fasta) = MAP_TO_TRANSCRIPTS_SEGEMEHL(other_genes_unmapped_sam, transcripts_index_ch, transcripts_sequence_ch)
+      if ( params.aligner_genome == "segemehl" ) {
+          (transcripts_mapped_sam, transcripts_unmapped_fasta) = MAP_TO_TRANSCRIPTS_SEGEMEHL(other_genes_unmapped_fasta, transcripts_index_ch, transcripts_sequence_ch)
       }
 
-      if ( params.aligner_mode == "star" ) {
-          (transcripts_mapped_sam, transcripts_unmapped_fasta) = MAP_TO_TRANSCRIPTS_STAR(other_genes_unmapped_sam, transcripts_index_ch) //transcripts_sequence_ch  )
+      if ( params.aligner_genome == "star" ) {
+          (transcripts_mapped_sorted_bam, transcripts_unmapped_fasta) = MAP_TO_TRANSCRIPTS_STAR(other_genes_unmapped_fasta, transcripts_index_ch, gtf_ch)
       }
 
-      transcripts_mapped_unique_sam = REMOVE_MULTIMAPPERS(transcripts_mapped_sam)
-      (transcripts_mapped_unique_sorted_bam, transcripts_mapped_unique_sorted_bam_bai, bam_bai_folder) = SAM2BAM_SORT_AND_INDEX(transcripts_mapped_unique_sam)
+      if ( params.aligner_genome == "segemehl" ) {
+	  transcripts_mapped_unique_sam = REMOVE_MULTIMAPPERS(transcripts_mapped_sam)
+}
+
+      if ( params.aligner_genome == "segemehl" ) {
+	  (transcripts_mapped_unique_sorted_bam, transcripts_mapped_unique_sorted_bam_bai, bam_bai_folder) = SAM2BAM_SORT_AND_INDEX(transcripts_mapped_unique_sam)    
+}
+
+      if ( params.aligner_genome == "star" ) {
+	  (transcripts_mapped_unique_sorted_bam, transcripts_mapped_unique_sorted_bam_bai, bam_sort_index_folder) = SAM2BAM_SORT_AND_INDEX(transcripts_mapped_sorted_bam)
+}
+
+      if ( params.aligner_genome == "segemehl" ) {
       read_length_histogram_pdf = READ_LENGTH_HISTOGRAM(  transcripts_mapped_unique_sam,
 							  plot_read_lengths_script_ch  )
+      
       alignment_offset_json = DETERMINE_P_SITE_OFFSET(  bam_bai_folder,
 							transcript_id_gene_id_CDS_ch,
 							determine_p_site_offsets_script_ch  )
+      
       counts_tsv = COUNT_READS(  bam_bai_folder,
 				 transcript_id_gene_id_CDS_ch,
 				 alignment_offset_json,
 				 count_reads_script_ch  )
-      (periodicity_start_pdf, periodicity_stop_pdf, periodicity_analysis_start_ribo_seq) = CHECK_PERIODICITY(bam_bai_folder, transcript_id_gene_id_CDS_ch, alignment_offset_json, check_periodicity_script_ch)
-      transcripts_mapped_unique_a_site_profile_bam = FILTER_READS_BASED_ON_READ_LENGTHS_AND_OFFSETS(bam_bai_folder, alignment_offset_json, filter_reads_based_on_read_lengths_and_offsets_script_ch)
-      (transcripts_mapped_unique_a_site_profile_sorted_bam, transcripts_mapped_unique_a_site_profile_sorted_bam_bai, bam_sort_index_folder) = BAM_SORT_AND_INDEX(transcripts_mapped_unique_a_site_profile_bam)
       
+      (periodicity_start_pdf, periodicity_stop_pdf, periodicity_analysis_start_ribo_seq) = CHECK_PERIODICITY(bam_bai_folder, transcript_id_gene_id_CDS_ch, alignment_offset_json, check_periodicity_script_ch)
+      
+      transcripts_mapped_unique_a_site_profile_bam = FILTER_READS_BASED_ON_READ_LENGTHS_AND_OFFSETS(bam_bai_folder, alignment_offset_json, filter_reads_based_on_read_lengths_and_offsets_script_ch)
+      
+      (transcripts_mapped_unique_a_site_profile_sorted_bam, transcripts_mapped_unique_a_site_profile_sorted_bam_bai, bam_sort_index_folder_filtered) = BAM_SORT_AND_INDEX(transcripts_mapped_unique_a_site_profile_bam)
+
+}     
 
     emit:
       oligos_counts
-      transcripts_mapped_unique_a_site_profile_sorted_bam
       bam_sort_index_folder
 
 }

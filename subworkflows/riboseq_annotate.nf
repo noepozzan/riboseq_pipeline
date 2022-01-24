@@ -209,26 +209,32 @@ workflow RIBOSEQ_ANNOTATE_PIPE {
       ctdCDS_script_ch 
 
     main:
-      longest_pc_transcript_per_gene_gtf = SELECT_LONGEST_CODING_TRANSCRIPT(gtf_ch, lct_script_ch)      
-      if ( params.aligner_mode == "segemehl" ) {
+      longest_pc_transcript_per_gene_gtf = SELECT_LONGEST_CODING_TRANSCRIPT(gtf_ch, lct_script_ch)
+
+      if ( params.other_genes_index_mode == "segemehl" ) {
 	  other_RNAs_sequence_idx = GENERATE_SEGEMEHL_INDEX_OTHER_RNAS(other_RNAs_sequence_ch)
       }
-      if ( params.aligner_mode == "star" ) {
+
+      if ( params.other_genes_index_mode == "star" ) {
 	  other_RNAs_sequence_idx = GENERATE_STAR_INDEX_OTHER_RNAS(other_RNAs_sequence_ch)
       }
+
       longest_pc_transcript_per_gene_fa = EXTRACT_TRANSCRIPT_SEQUENCES(  longest_pc_transcript_per_gene_gtf,
 									 genome_ch  )
+
       transcript_id_gene_id_CDS_tsv = CREATE_TAB_DELIMITED_CDS_FILE(  longest_pc_transcript_per_gene_gtf,
 								      longest_pc_transcript_per_gene_fa,
 								      ctdCDS_script_ch  )
+
       transcript_id_gene_id_CDS_bed = CREATE_BED_CDS_FILE(transcript_id_gene_id_CDS_tsv)
-      if ( params.aligner_mode == "segemehl" ) {
-          longest_pc_transcript_per_gene_idx = GENERATE_SEGEMEHL_INDEX_TRANSCRIPTS(longest_pc_transcript_per_gene_fa)
-      }
-      if ( params.aligner_mode == "star" ) {
-       	  longest_pc_transcript_per_gene_idx = GENERATE_STAR_INDEX_TRANSCRIPTS(longest_pc_transcript_per_gene_fa)
+
+      if ( params.genome_index_mode == "segemehl" ) {
+          genome_idx = GENERATE_SEGEMEHL_INDEX_TRANSCRIPTS(longest_pc_transcript_per_gene_fa)
       }
 
+      if ( params.genome_index_mode == "star" ) {
+       	  genome_idx = GENERATE_STAR_INDEX_TRANSCRIPTS(genome_ch)
+      }
 
     emit:
       longest_pc_transcript_per_gene_gtf
@@ -236,6 +242,19 @@ workflow RIBOSEQ_ANNOTATE_PIPE {
       longest_pc_transcript_per_gene_fa
       transcript_id_gene_id_CDS_tsv
       transcript_id_gene_id_CDS_bed
-      longest_pc_transcript_per_gene_idx
+      genome_idx
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

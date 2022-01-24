@@ -1,6 +1,6 @@
 nextflow.enable.dsl=2
 
-include { PHILOSOPHER_PIPE } from './workspace/simple_data_analysis.nf'
+include { PHILOSOPHER_PIPE } from './subworkflows/simple_data_analysis.nf'
 include { RIBOSEQ_ANNOTATE_PIPE } from './subworkflows/riboseq_annotate.nf'
 include { RIBOSEQ_PROCESS_DATA_PIPE } from './subworkflows/riboseq_process_data.nf'
 include { PULL_CONTAINERS } from './subworkflows/pull_containers.nf'
@@ -96,7 +96,7 @@ workflow {
                                 other_RNAs_sequence_ch,
                                 count_oligos_script_ch,
                                 RIBOSEQ_ANNOTATE_PIPE.out.other_RNAs_sequence_idx,
-                                RIBOSEQ_ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_idx,
+                                RIBOSEQ_ANNOTATE_PIPE.out.genome_idx,
                                 find_overrepresented_sequences_script_ch,
                                 RIBOSEQ_ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_fa,
                                 plot_read_lengths_script_ch,
@@ -104,14 +104,12 @@ workflow {
                                 determine_p_site_offsets_script_ch,
                                 count_reads_script_ch,
                                 check_periodicity_script_ch,
-                                filter_reads_based_on_read_lengths_and_offsets_script_ch  )
+                                filter_reads_based_on_read_lengths_and_offsets_script_ch,
+				gtf_ch  )
     
-    RIBOTISH_PIPE(  //RIBOSEQ_ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_gtf,
-		    gtf_ch,
-		    //RIBOSEQ_PROCESS_DATA_PIPE.out.transcripts_mapped_unique_a_site_profile_sorted_bam,
+    RIBOTISH_PIPE(  gtf_ch,
 		    RIBOSEQ_PROCESS_DATA_PIPE.out.bam_sort_index_folder,
-		    genome_ch,
-		    genome_fai_ch  )
+		    genome_ch  )
 
 
     PHILOSOPHER_PIPE(  PULL_CONTAINERS.out,
