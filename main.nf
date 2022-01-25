@@ -42,7 +42,7 @@ genome_fai_ch = Channel.fromPath(params.genome_fai)
 
 // philosopher channels
 proteomics_reads_ch = Channel.fromPath(params.proteomics_reads)
-db_ch = Channel.fromPath(params.philosopher_db)
+philosopher_db_ch = Channel.fromPath(params.philosopher_db)
 change_file_script_ch = Channel.fromPath(params.change_file_script)
 
 def helpMessage() {
@@ -74,14 +74,13 @@ workflow {
     PULL_CONTAINERS(  config_file_ch,
 		      pull_file_ch  )
 
-/*
-    CHECK_FILES(  riboseq_reads_ch,
-		  proteomics_reads_ch,
-		  genome_ch,
-		  genome_fai_ch,
-		  gtf_ch,
-		  other_RNAs_sequence_ch  )
-*/		  
+    CHECK_FILES_PIPE(  riboseq_reads_ch,
+		       proteomics_reads_ch,
+		       genome_ch,
+		       genome_fai_ch,
+		       gtf_ch,
+		       other_RNAs_sequence_ch,
+		       check_files_script_ch  )
 
     RIBOSEQ_ANNOTATE_PIPE(  PULL_CONTAINERS.out,
 			    gtf_ch,
@@ -113,9 +112,9 @@ workflow {
 
 
     PHILOSOPHER_PIPE(  PULL_CONTAINERS.out,
-		       RIBOSEQ_PROCESS_DATA_PIPE.out.oligos_counts.collect(),
+		       RIBOTISH_PIPE.out.ribotish_predict.collect(),
 		       proteomics_reads_ch,
-		       db_ch,
+		       philosopher_db_ch,
 		       change_file_script_ch  )      
   
   

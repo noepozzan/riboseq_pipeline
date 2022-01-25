@@ -9,16 +9,22 @@ process RIBOTISH_QUALITY {
     publishDir "${params.ribotish_connect_outDir}/ribotish_quality", mode: 'copy'
 
     input:
-    each(path(bam_file))
+    each(path(bam_sort_index_folder))
     path gtf_file
 
     output:
-    path '*'
+    path '*.pdf'
+    path '*.txt'
 
     script:
     """
+    input=\$(basename ${bam_sort_index_folder})
+    prefix=\$(echo \$input | cut -d '.' -f 1)
+
+    cp ${bam_sort_index_folder}/* .
+
     ribotish quality \
-	-b ${bam_file} \
+	-b \${prefix}.sorted_indexed.bam \
 	-g ${gtf_file} \
 	--th ${params.ribotish_quality_th}
     """
@@ -26,8 +32,6 @@ process RIBOTISH_QUALITY {
 }
 
 process RIBOTISH_PREDICT {
-
-    echo true
 
     label "ribotish"
     label "heavy_computation"
@@ -40,7 +44,7 @@ process RIBOTISH_PREDICT {
     path genome
 
     output:
-    //path '*.ribotish.predict'
+    //path '*.ribotish_pred.txt'
     path '*'
 
     script:
@@ -51,14 +55,14 @@ process RIBOTISH_PREDICT {
     cp ${bam_sort_index_folder}/* .
 
     ribotish predict \
-	-b \${prefix}.${bam_sort_index_folder} \
+	-b \${prefix}.sorted_indexed.bam \
 	-g ${gtf_file} \
 	-f ${genome} \
 	-o \${prefix}.ribotish_pred.txt
 
     : '
     ribotish predict \
-	-b \${prefix}.transcripts.mapped.unique.a_site_profile.sorted.bam \
+	-b \${prefix}.sorted_indexed.bam \
 	-g ${gtf_file} \
 	-f ${genome} \
 	${params.ribotish_predict_mode} \
@@ -67,6 +71,32 @@ process RIBOTISH_PREDICT {
     '
     """
 
+
+}
+
+process COMBINE {
+
+    echo true
+
+    //label "pandas"
+
+    publishDir "${params.ribotish_connect_outDir}/ribotish_combine", mode: 'copy'
+
+    input:
+    path ribo_pred
+
+    //output:
+
+
+    script:
+    """
+    for VAR in ${ribo_pred}
+    do
+
+	echo \$VAR
+
+    done
+    """
 
 }
 
@@ -86,6 +116,8 @@ workflow RIBOTISH_PIPE {
       ribotish_predict = RIBOTISH_PREDICT(  bam_sort_index_folder_ch,
 					    gtf_ch,
 					    genome_ch  )
+
+      ribotish_combined_preds = COMBINE(ribotish_predict.collect())
 
     emit:
       ribotish_predict

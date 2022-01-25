@@ -2,7 +2,7 @@ nextflow.enable.dsl=2
 
 process CHECK_FILE_PRESENCE {
 
-    echo true
+    publishDir "./check_files_results", mode: 'copy'
 
     input:
     path riboseq_reads
@@ -13,9 +13,18 @@ process CHECK_FILE_PRESENCE {
     path other_RNAs_sequence
     path script_py
 
+    output:
+    path 'check_files.log'
+
     script:
     """
-    python ${script_py} 6 ${riboseq_reads} ${proteomics_reads} ${genome} ${genome_fai} ${gtf} ${other_RNAs_sequence}
+    python ${script_py} 6 \
+	${riboseq_reads} \
+	${proteomics_reads} \
+	${genome} ${genome_fai} \
+	${gtf} \
+	${other_RNAs_sequence} \
+	&> check_files.log
 
     """
 

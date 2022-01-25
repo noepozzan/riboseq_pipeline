@@ -334,8 +334,10 @@ process MAP_TO_TRANSCRIPTS_STAR {
     path gtf
 
     output:
+    //path '*.Aligned.out.sam'
+    //path '*.unmapped'
     path '*.Aligned.out.sam'
-    path '*.unmapped'
+    path '*.Unmapped*'
 
     script:
     """
@@ -350,8 +352,8 @@ process MAP_TO_TRANSCRIPTS_STAR {
 		--sjdbGTFfile ${gtf} \
 		--outSAMattributes All \
 		--quantMode GeneCounts \
-		--outSAMtype BAM SortedByCoordinate \
 		--readFilesIn \$VAR \
+		--outReadsUnmapped Fastx \
 		--outFileNamePrefix \${prefix}.
 
 	: '
@@ -367,9 +369,9 @@ process MAP_TO_TRANSCRIPTS_STAR {
 		--alignIntronMax 20000 \
 		--outMultimapperOrder Random \
 		--outSAMmultNmax 1
-	'
 
 	mv *.Unmapped.out.* \${prefix}.unmapped
+	'
 
     done
 
@@ -403,41 +405,36 @@ process REMOVE_MULTIMAPPERS {
 
 }
 
-process SAM2BAM_SORT_AND_INDEX {
+process SAM_TO_BAM_SORT_AND_INDEX {
     
     label "samtools"
 
-    publishDir "${params.riboseq_process_data_outDir}/sam2bam_sort_and_index", mode: 'copy'
+    publishDir "${params.riboseq_process_data_outDir}/sam_to_bam_sort_and_index", mode: 'copy'
 
     input:
-    //path sam
-    path bam
+    path sam
 
     output:
-    path '*.transcripts_mapped_unique_sorted_bam'
-    path '*.transcripts_mapped_unique_sorted_bam.bai'
-    path '*.sam2bam'
+    //path '*.transcripts_mapped_unique_sorted_bam'
+    //path '*.transcripts_mapped_unique_sorted_bam.bai'
+    //path '*.sam2bam'
+    path '*.sorted_indexed.bam'
+    path '*.sorted_indexed.bam.bai'
+    path '*.folder_sorted_indexed_bam'
 
     script:
     """
     input=\$(basename ${sam})
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
-
-    samtools index ${bam}
-
-    mkdir \${prefix}.sam2bam
-    cp \${prefix}.transcripts* \${prefix}.sam2bam
-
-    : '
     samtools view -bS ${sam} \
-	| samtools sort - > \${prefix}.transcripts_mapped_unique_sorted_bam; \
-	samtools index \${prefix}.transcripts_mapped_unique_sorted_bam; \
-	2> \${prefix}_sam2bam_sort_and_index.log
+	| samtools sort - > \${prefix}.sorted_indexed.bam; \
+	samtools index \${prefix}.sorted_indexed.bam; \
+	2> \${prefix}_bam_sorted_and_indexed.log
 
-    mkdir \${prefix}.sam2bam
-    cp \${prefix}.transcripts* \${prefix}.sam2bam
-    '
+    mkdir \${prefix}.folder_sorted_indexed_bam
+    cp \${prefix}.sorted* \${prefix}.folder_sorted_indexed_bam
+
     """
 
 }
@@ -477,7 +474,6 @@ process DETERMINE_P_SITE_OFFSET {
     publishDir "${params.riboseq_process_data_outDir}/determine_p_site_offset", mode: 'copy'
 
     input:
-    //each(path(bam))
     each(path(bam_folder))
     path transcript_id_gene_id_CDS
     path script_py
@@ -734,11 +730,11 @@ workflow RIBOSEQ_PROCESS_DATA_PIPE {
 }
 
       if ( params.aligner_genome == "segemehl" ) {
-	  (transcripts_mapped_unique_sorted_bam, transcripts_mapped_unique_sorted_bam_bai, bam_bai_folder) = SAM2BAM_SORT_AND_INDEX(transcripts_mapped_unique_sam)    
+	  (transcripts_mapped_unique_sorted_bam, transcripts_mapped_unique_sorted_bam_bai, bam_bai_folder) = SAM_TO_BAM_SORT_AND_INDEX(transcripts_mapped_unique_sam)
 }
 
       if ( params.aligner_genome == "star" ) {
-	  (transcripts_mapped_unique_sorted_bam, transcripts_mapped_unique_sorted_bam_bai, bam_sort_index_folder) = SAM2BAM_SORT_AND_INDEX(transcripts_mapped_sorted_bam)
+	  (transcripts_mapped_unique_sorted_bam, transcripts_mapped_unique_sorted_bam_bai, bam_sort_index_folder) = SAM_TO_BAM_SORT_AND_INDEX(transcripts_mapped_sorted_bam)
 }
 
       if ( params.aligner_genome == "segemehl" ) {
@@ -763,7 +759,6 @@ workflow RIBOSEQ_PROCESS_DATA_PIPE {
 }     
 
     emit:
-      oligos_counts
       bam_sort_index_folder
 
 }

@@ -19,6 +19,7 @@ process WORKSPACE {
 
     script:
     """
+    rm -rf ${params.workspace}
     mkdir ${params.workspace}
 
     mzML_dir=${params.proteomics_reads}
@@ -26,12 +27,18 @@ process WORKSPACE {
 
     mv \${parentdir_mzML}/* ${params.workspace}/
 
+    db_dir=${params.philosopher_db}
+    parentdir_db="\$(dirname "\$db_dir")"
+
+    mv ${params.philosopher_db} ${params.workspace}/
+
     # initialize philosopher workspace in workspace
     cd ${params.workspace}
     philosopher workspace --clean
     philosopher workspace --init
 
     cp *.mzML \$parentdir_mzML
+    cp *.fasta \$parentdir_db
     """
 
 }
@@ -86,29 +93,7 @@ process GENERATE_CHANGE_PARAMS {
     """
 
 }
-/*
-process CHANGEFILE {
 
-    publishDir "${params.philosopher_outDir}/changefile", mode: 'copy'
-
-    input:
-    path db
-    path closed_fragger
-    path change_file_script
-    
-    output:
-    path 'closed_fragger.params'
-
-    script:
-    """
-    python ${change_file_script} ${db} ${closed_fragger}
-
-    cp closed_fragger.params ${params.workspace}
-
-    """
-
-}
-*/
 process MSFRAGGER {
 
     label "msfragger"
@@ -288,6 +273,8 @@ process REPORT {
 
 process CLEAN_UP_WORKSPACE {
 
+    echo true
+
     label "philosopher"
 
     input:
@@ -296,6 +283,8 @@ process CLEAN_UP_WORKSPACE {
     script:
     """
 
+    cd ${params.workspace}
+    cd ..
     rm -rf ${params.workspace}
 
     : '
@@ -315,13 +304,13 @@ workflow PHILOSOPHER_PIPE {
 
     take:
       pull_containers_ch
-      riboseq_ch
+      ribotish_predict_ch
       input_ch
       db_ch
       change_file_script_ch
 
     main:
-      workspace_obj = WORKSPACE(riboseq_ch)
+      workspace_obj = WORKSPACE(ribotish_predict_ch)
       db_obj = DATABASE(workspace_obj, db_ch)
       change_obj = GENERATE_CHANGE_PARAMS(db_obj, change_file_script_ch)
       pepXML_obj = MSFRAGGER(input_ch.collect(), change_obj, db_obj)
