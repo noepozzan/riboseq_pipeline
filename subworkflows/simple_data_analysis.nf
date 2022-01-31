@@ -257,16 +257,15 @@ process REPORT {
     val freequant
 
     output:
-    path 'msstats.csv'
+    path '*'
  
     script:
     """
-    workd=\$(pwd)
-
+	workd=\$(pwd)
     cd ${params.workspace}
     philosopher report --msstats 2> report.out
 
-    cp msstats.csv \$workd
+	cp msstats.csv peptide.tsv psm.tsv ion.tsv  \$workd
     """
 
 }
@@ -303,7 +302,6 @@ process CLEAN_UP_WORKSPACE {
 workflow PHILOSOPHER_PIPE {
 
     take:
-      pull_containers_ch
       ribotish_predict_ch
       input_ch
       db_ch
@@ -314,12 +312,12 @@ workflow PHILOSOPHER_PIPE {
       db_obj = DATABASE(workspace_obj, db_ch)
       change_obj = GENERATE_CHANGE_PARAMS(db_obj, change_file_script_ch)
       pepXML_obj = MSFRAGGER(input_ch.collect(), change_obj, db_obj)
-      pepdotxml_obj = PEPTIDEPROPHET(db_obj, pepXML_obj)
-      protXML_obj = PROTEINPROPHET(pepdotxml_obj)
-      filter_obj = FILTERANDFDR(pepdotxml_obj, protXML_obj)
+      interact_pep_xml = PEPTIDEPROPHET(db_obj, pepXML_obj)
+      protXML_obj = PROTEINPROPHET(interact_pep_xml)
+      filter_obj = FILTERANDFDR(interact_pep_xml, protXML_obj)
       quant_obj = QUANTIFY(filter_obj)
       report_obj = REPORT(quant_obj)
-      CLEAN_UP_WORKSPACE(report_obj)
+      //CLEAN_UP_WORKSPACE(report_obj)
 
     emit:
       report_obj

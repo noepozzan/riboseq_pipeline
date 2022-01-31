@@ -201,7 +201,6 @@ process GENERATE_STAR_INDEX_TRANSCRIPTS {
 workflow RIBOSEQ_ANNOTATE_PIPE {
 
     take:
-      pull_containers_ch
       gtf_ch
       lct_script_ch
       other_RNAs_sequence_ch

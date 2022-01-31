@@ -13,8 +13,9 @@ process RIBOTISH_QUALITY {
     path gtf_file
 
     output:
-    path '*.pdf'
-    path '*.txt'
+	path '*.para.py', emit: offset
+    path '*.pdf', emit: ribo_pdf
+	path '*.txt', emit: ribo_txt
 
     script:
     """
@@ -24,9 +25,9 @@ process RIBOTISH_QUALITY {
     cp ${bam_sort_index_folder}/* .
 
     ribotish quality \
-	-b \${prefix}.sorted_indexed.bam \
-	-g ${gtf_file} \
-	--th ${params.ribotish_quality_th}
+		-b \${prefix}.*.bam \
+		-g ${gtf_file} \
+		--th ${params.ribotish_quality_th}
     """
 
 }
@@ -34,7 +35,7 @@ process RIBOTISH_QUALITY {
 process RIBOTISH_PREDICT {
 
     label "ribotish"
-    label "heavy_computation"
+    //label "heavy_computation"
 
     publishDir "${params.ribotish_connect_outDir}/ribotish_predict", mode: 'copy'
 
@@ -44,8 +45,7 @@ process RIBOTISH_PREDICT {
     path genome
 
     output:
-    //path '*.ribotish_pred.txt'
-    path '*'
+    path '*.ribotish.pred_all.txt', emit: ribo_pred
 
     script:
     """
@@ -54,23 +54,20 @@ process RIBOTISH_PREDICT {
 
     cp ${bam_sort_index_folder}/* .
 
-    ribotish predict \
-	-b \${prefix}.sorted_indexed.bam \
-	-g ${gtf_file} \
-	-f ${genome} \
-	-o \${prefix}.ribotish_pred.txt
+	ribotish quality \
+        -b \${prefix}.*.bam \
+        -g ${gtf_file} \
+        --th ${params.ribotish_quality_th}
 
-    : '
     ribotish predict \
-	-b \${prefix}.sorted_indexed.bam \
-	-g ${gtf_file} \
-	-f ${genome} \
-	${params.ribotish_predict_mode} \
-	-o \${prefix}.ribotish.predict \
-	&> \${prefix}_ribotish_predict.log
-    '
+		-b \${prefix}.*.bam \
+		-g ${gtf_file} \
+		-f ${genome} \
+		${params.ribotish_predict_mode} \
+		-o \${prefix}.ribotish.pred.txt \
+		&> \${prefix}_ribotish_predict.log
+
     """
-
 
 }
 
@@ -85,18 +82,28 @@ process COMBINE {
     input:
     path ribo_pred
 
-    //output:
-
+    output:
+	path 'combined_shORFs_position_preds.txt', emit: prediction
 
     script:
     """
+
+	WRITE_HEADER="true"
     for VAR in ${ribo_pred}
     do
 
-	echo \$VAR
+		if [ "\$WRITE_HEADER" == "true" ]; then
+
+	    	head -1 \$VAR > combined_shORFs_position_preds.txt
+	    	WRITE_HEADER="false"
+
+		fi
+
+		tail -n +2 -q \$VAR >> combined_shORFs_position_preds.txt
 
     done
-    """
+	
+	"""
 
 }
 
@@ -109,18 +116,18 @@ workflow RIBOTISH_PIPE {
       genome_ch
 
     main:
-
       RIBOTISH_QUALITY(  bam_sort_index_folder_ch,
-			 gtf_ch  )
+						 gtf_ch  )
 
-      ribotish_predict = RIBOTISH_PREDICT(  bam_sort_index_folder_ch,
-					    gtf_ch,
-					    genome_ch  )
-
-      ribotish_combined_preds = COMBINE(ribotish_predict.collect())
+      RIBOTISH_PREDICT(  bam_sort_index_folder_ch,
+						 gtf_ch,
+						 genome_ch  )
+      
+	  COMBINE(RIBOTISH_PREDICT.out.ribo_pred.collect())
+	  ribo_pred = COMBINE.out.prediction
 
     emit:
-      ribotish_predict
+      ribo_pred
 
 }
 

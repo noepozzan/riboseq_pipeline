@@ -450,7 +450,7 @@ process READ_LENGTH_HISTOGRAM {
     path script_py
 
     output:
-    path '*E14'
+    path '*'
 
     script:
     """
@@ -672,7 +672,6 @@ process BAM_SORT_AND_INDEX {
 workflow RIBOSEQ_PROCESS_DATA_PIPE {
 
     take:
-      pull_containers_ch
       reads_ch
       oligos_ch
       other_RNAs_sequence_ch
@@ -738,21 +737,27 @@ workflow RIBOSEQ_PROCESS_DATA_PIPE {
 }
 
       if ( params.aligner_genome == "segemehl" ) {
-      read_length_histogram_pdf = READ_LENGTH_HISTOGRAM(  transcripts_mapped_unique_sam,
+      READ_LENGTH_HISTOGRAM(  transcripts_mapped_unique_sam,
 							  plot_read_lengths_script_ch  )
       
       alignment_offset_json = DETERMINE_P_SITE_OFFSET(  bam_bai_folder,
 							transcript_id_gene_id_CDS_ch,
 							determine_p_site_offsets_script_ch  )
       
-      counts_tsv = COUNT_READS(  bam_bai_folder,
+      COUNT_READS(  bam_bai_folder,
 				 transcript_id_gene_id_CDS_ch,
 				 alignment_offset_json,
 				 count_reads_script_ch  )
       
-      (periodicity_start_pdf, periodicity_stop_pdf, periodicity_analysis_start_ribo_seq) = CHECK_PERIODICITY(bam_bai_folder, transcript_id_gene_id_CDS_ch, alignment_offset_json, check_periodicity_script_ch)
+      CHECK_PERIODICITY(  bam_bai_folder,
+						  transcript_id_gene_id_CDS_ch,
+						  alignment_offset_json,
+						  check_periodicity_script_ch)
       
-      transcripts_mapped_unique_a_site_profile_bam = FILTER_READS_BASED_ON_READ_LENGTHS_AND_OFFSETS(bam_bai_folder, alignment_offset_json, filter_reads_based_on_read_lengths_and_offsets_script_ch)
+      transcripts_mapped_unique_a_site_profile_bam = FILTER_READS_BASED_ON_READ_LENGTHS_AND_OFFSETS(
+		bam_bai_folder,
+		alignment_offset_json,
+		filter_reads_based_on_read_lengths_and_offsets_script_ch)
       
       (transcripts_mapped_unique_a_site_profile_sorted_bam, transcripts_mapped_unique_a_site_profile_sorted_bam_bai, bam_sort_index_folder_filtered) = BAM_SORT_AND_INDEX(transcripts_mapped_unique_a_site_profile_bam)
 

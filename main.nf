@@ -67,8 +67,6 @@ if (params.help) {
 }
 
 
-
-
 workflow {
 
     PULL_CONTAINERS(  config_file_ch,
@@ -82,15 +80,13 @@ workflow {
 		       other_RNAs_sequence_ch,
 		       check_files_script_ch  )
 
-    RIBOSEQ_ANNOTATE_PIPE(  PULL_CONTAINERS.out,
-			    gtf_ch,
+    RIBOSEQ_ANNOTATE_PIPE(  gtf_ch,
                             lct_script_ch,
                             other_RNAs_sequence_ch,
                             genome_ch,
                             ctdCDS_script_ch  )
 
-    RIBOSEQ_PROCESS_DATA_PIPE(  PULL_CONTAINERS.out,
-				riboseq_reads_ch,
+    RIBOSEQ_PROCESS_DATA_PIPE(  riboseq_reads_ch,
                                 oligos_ch,
                                 other_RNAs_sequence_ch,
                                 count_oligos_script_ch,
@@ -104,18 +100,17 @@ workflow {
                                 count_reads_script_ch,
                                 check_periodicity_script_ch,
                                 filter_reads_based_on_read_lengths_and_offsets_script_ch,
-				gtf_ch  )
+								gtf_ch  )
     
     RIBOTISH_PIPE(  gtf_ch,
-		    RIBOSEQ_PROCESS_DATA_PIPE.out.bam_sort_index_folder,
-		    genome_ch  )
+					RIBOSEQ_PROCESS_DATA_PIPE.out.bam_sort_index_folder,
+					genome_ch  )
 
 
-    PHILOSOPHER_PIPE(  PULL_CONTAINERS.out,
-		       RIBOTISH_PIPE.out.ribotish_predict.collect(),
-		       proteomics_reads_ch,
-		       philosopher_db_ch,
-		       change_file_script_ch  )      
+    PHILOSOPHER_PIPE(  RIBOTISH_PIPE.out.ribo_pred,
+					   proteomics_reads_ch,
+					   philosopher_db_ch,
+					   change_file_script_ch  )      
   
   
 
