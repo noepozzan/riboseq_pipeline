@@ -19,9 +19,9 @@ process SELECT_LONGEST_CODING_TRANSCRIPT {
     script:
     """
     python ${select_longest_ct_py} \
-	--gtf ${input_gtf} \
-	--out longest_coding_transcript_per_gene.gtf \
-	2> select_longest_coding_transcript.log
+		--gtf ${input_gtf} \
+		--out longest_coding_transcript_per_gene.gtf \
+		2> select_longest_coding_transcript.log
 
     """
 

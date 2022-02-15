@@ -46,7 +46,7 @@ process RIBOTISH_PREDICT {
 	each(path(offsets))
 
     output:
-    path '*.ribotish_pred.txt', emit: ribo_pred, optional: true
+    path '*.ribotish_pred_all.txt', emit: ribo_pred, optional: true
 
     script:
     """
@@ -101,9 +101,9 @@ process GFFREAD {
 
 process SORF_TO_PEPTIDE {
 
-	//label "python..."
+	label "sorf_to_speptide"
 
-    publishDir "${params.ribotish_dir}/ribotish_combine", mode: 'copy'
+    publishDir "${params.ribotish_dir}/sorf_to_peptide", mode: 'copy'
 
     input:
     each(path(ribo_pred))
@@ -118,11 +118,39 @@ process SORF_TO_PEPTIDE {
 	input=\$(basename ${ribo_pred})
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
-	python ${python_script} \
+	python3 ${python_script} \
 		--ribo_pred ${ribo_pred} \
 		--fasta ${fasta} \
 		--out \${prefix}.speptide
 
+	
+	"""
+
+}
+
+process COMBINE {
+    
+	label "sorf_to_speptide"
+
+    publishDir "${params.ribotish_dir}/combine", mode: 'copy'
+
+    input:
+    path ribo_pred
+
+    output:
+	path 'combined_speptide.txt', emit: combined_prediction
+
+    script:
+    """
+	WRITE_HEADER="true"
+    for VAR in ${ribo_pred}
+    do
+		if [ "\$WRITE_HEADER" == "true" ]; then
+	    	head -1 \$VAR > combined_speptide.txt
+	    	WRITE_HEADER="false"
+		fi
+		tail -n +2 -q \$VAR >> combined_speptide.txt
+    done
 	
 	"""
 
@@ -165,8 +193,13 @@ workflow RIBOTISH_PIPE {
 	)
 	speptide = SORF_TO_PEPTIDE.out.prediction
 
+	COMBINE(
+		speptide.collect()
+	)
+	speptide_combined = COMBINE.out.combined_prediction
+
     emit:
-    speptide
+    speptide_combined
 
 }
 

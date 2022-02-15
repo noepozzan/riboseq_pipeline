@@ -8,6 +8,6 @@
 #SBATCH --output=nextflow_run.o%j
 #SBATCH --error=nextflow_run.e%j
  
-nextflow run main.nf -profile slurm_offline -resume --max_cpus 5
+nextflow run main.nf -profile slurm_offline -resume
 
 
