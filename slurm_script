@@ -7,7 +7,19 @@
 #SBATCH --qos=6hours
 #SBATCH --output=nextflow_run.o%j
 #SBATCH --error=nextflow_run.e%j
- 
-nextflow run main.nf -profile slurm_offline -resume
+
+nextflow run main.nf -profile slurm_offline -entry PHILOSOPHER
+
+# Setting "-profile slurm_offline"
+# is necessary bc slurm nodes are not online
+: '
+nextflow run \
+	main.nf \
+	-profile slurm_offline \
+	-resume //\
+	//--riboseq_reads /path/to/reads \
+	//--proteomics_reads /path/to/reads \
+	//--
+'	
 
 

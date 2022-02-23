@@ -8,7 +8,8 @@ include { RIBOTISH_PIPE } from './subworkflows/ribotish.nf'
 include { CHECK_FILES_PIPE } from './subworkflows/check_files.nf'
 
 // pull containers channels
-config_file_ch = Channel.fromPath(params.slurm_config)
+slurm_online_config = Channel.fromPath(params.slurm_config)
+//slurm_offline_config = Channel.fromPath("${projectDir}/conf/slurm_offline.config")
 pull_file_ch = Channel.fromPath(params.pull_containers_file)
 
 // check_files channels
@@ -35,22 +36,37 @@ if (params.help) {
     exit 0
 }
 
-gtf_ch = channel.fromPath('./data/Mus_musculus.GRCm38.99.chr.gtf')
-other_RNAs_sequence_ch = channel.fromPath('./data/mm10_rrnas.fa')
-genome_ch = channel.fromPath('./data/Mus_musculus.GRCm38.dna_sm.primary_assembly.fa')
-genome_fai_ch = channel.fromPath('./data/Mus_musculus.GRCm38.dna_sm.primary_assembly.fa.fai')
-riboseq_reads_ch = channel.fromPath('./data/muscle_samples/*.gz')
+gtf_ch = channel.fromPath(params.gtf)
+other_RNAs_sequence_ch = channel.fromPath(params.other_RNAs_sequence)
+genome_ch = channel.fromPath(params.genome)
+genome_fai_ch = channel.fromPath(params.genome_fai)
 oligos_ch = channel.fromPath('./data/oligos.txt')
-proteomics_reads_ch = channel.fromPath('./data/proteomics_reads/*.mzML')
+riboseq_reads_ch = channel.fromPath(params.riboseq_reads)
+proteomics_reads_ch = channel.fromPath(params.proteomics_reads)
+
+workflow PULLING {
+
+	PULL_CONTAINERS(
+        slurm_online_config,
+        pull_file_ch
+    )
+
+}
+
+workflow PHILOSOPHER {
+
+	speptides = channel.fromPath("${projectDir}/data/small_peptides_all_quad_samples.fasta")
+
+	PHILOSOPHER_PIPE(
+        speptides,
+        proteomics_reads_ch
+    )
+
+}
 
 workflow {
 
 /*
-    PULL_CONTAINERS(
-		config_file_ch,
-		pull_file_ch
-	)
-
     CHECK_FILES_PIPE(
 		riboseq_reads_ch,
 		proteomics_reads_ch,
@@ -92,3 +108,5 @@ workflow {
 	)
 
 }
+
+

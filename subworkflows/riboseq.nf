@@ -147,15 +147,10 @@ process CLIP_READS {
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
     fastx_clipper \
-	${params.clip_reads_v} \
-	${params.clip_reads_n} \
-	-l ${params.clip_reads_l} \
-	${params.clip_reads_c} \
-	${params.clip_reads_z} \
-	-a ${params.clip_reads_adapter} \
-	-i <(zcat ${reads}) \
-	-o \${prefix}.pro_clipped \
-	&> \${prefix}_clip_reads.log
+		${params.clip_reads_args} \
+		-i <(zcat ${reads}) \
+		-o \${prefix}.pro_clipped \
+		&> \${prefix}_clip_reads.log
     
     """
 
@@ -180,13 +175,10 @@ process TRIM_READS {
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
     fastq_quality_trimmer \
-	${params.trim_reads_v} \
-	-l ${params.trim_reads_l} \
-	-t ${params.trim_reads_t} \
-	-Q ${params.trim_reads_Q} \
-	${params.trim_reads_z} \
-	-i <(zcat ${reads}) \
-	-o \${prefix}.pro_trimmed 2> \${prefix}_trim_reads.log
+		${params.trim_reads_args} \
+		-i <(zcat ${reads}) \
+		-o \${prefix}.pro_trimmed \
+		2> \${prefix}_trim_reads.log
 
     """
 
@@ -210,13 +202,9 @@ process FILTER_READS {
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
     fastq_quality_filter \
-	${params.filter_reads_v} \
-	-q ${params.filter_reads_q} \
-	-p ${params.filter_reads_p} \
-	-Q ${params.filter_reads_Q} \
-	${params.filter_reads_z} \
-	-i <(zcat ${reads}) \
-	-o \${prefix}.pro_filtered 2> \${prefix}_filter_reads.log
+		${params.filter_reads_args} \
+		-i <(zcat ${reads}) \
+		-o \${prefix}.pro_filtered 2> \${prefix}_filter_reads.log
 
     """
 
@@ -240,11 +228,9 @@ process FASTQ_TO_FASTA {
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
     fastq_to_fasta \
-	${params.fq_to_fa_v} \
-	${params.fq_to_fa_n} \
-	${params.fq_to_fa_r} \
-	-i <(zcat ${reads}) \
-	-o \${prefix}.pro_filtered_fasta 2> \${prefix}_fastq_to_fasta.log
+		${params.fastq_to_fasta_args} \
+		-i <(zcat ${reads}) \
+		-o \${prefix}.pro_filtered_fasta 2> \${prefix}_fastq_to_fasta.log
 
     """
 

@@ -2,30 +2,27 @@ nextflow.enable.dsl=2
 
 process PULL_SINGULARITY {
 
+	label "htseq"
+
     input:
-    path config_file
-    path script_py
+    path slurm_online
+    path python_script
 
     output:
-    path 'finished.txt'
+    path 'slurm_offline.config'
 
     script:
     """
-    workd=\$(pwd)
-    python ${script_py} ${config_file} > containers.txt
+	# extract docker addresses out of conf file
+	# and write to output file, also pull the singularity images
+	python ${python_script} \
+		--config_file ${slurm_online} \
+		--out slurm_offline.config \
+		--dest ${params.singularity_store}
 
-    input="containers.txt"
-    while IFS= read -r line
-    do
-      #echo Pulling singularity image: \$line
-      singularity pull \$line
-    done < "\$input"
+	cp slurm_offline.config ${projectDir}/conf
     
-    mv *.sif ${params.singularity_store}
-
-    # pseudo process to make other processes wait	
-    echo finished > finished.txt
-    """
+	"""
 
 }
 
@@ -33,13 +30,16 @@ process PULL_SINGULARITY {
 workflow PULL_CONTAINERS {
 
     take:
-      config_file_ch
-      pull_file_ch
+    online_slurm_config
+    pull_file_ch
 
     main:
-      PULL_SINGULARITY(  config_file_ch,
-			 pull_file_ch  )
+    PULL_SINGULARITY(
+		online_slurm_config,
+		pull_file_ch
+	)
 
     emit:
-      PULL_SINGULARITY.out
+    PULL_SINGULARITY.out
 }
+

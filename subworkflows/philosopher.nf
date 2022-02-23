@@ -2,8 +2,8 @@
 
 nextflow.enable.dsl=2
 
-
 //https://github.com/Nesvilab/philosopher/wiki/Simple-Data-Analysis
+
 
 process WORKSPACE {
 
@@ -24,8 +24,12 @@ process WORKSPACE {
 
 	# move input files to working directory
 
-    mv ${params.proteomics_reads}/* ${params.workspace}/
+	for VAR in ${params.proteomics_reads}
+	do
+    	mv \$VAR ${params.workspace}/
+	done
 
+	# move the predicted sPeptides file to the workspace
     mv ${ribotish_speptide} ${params.workspace}/
 
     # initialize philosopher in the philosopher
@@ -35,7 +39,9 @@ process WORKSPACE {
     philosopher workspace --init
 
 	# copy input files back to data folder as a backup
-    cp *.mzML ${params.proteomics_reads}
+    dir=${params.proteomics_reads}
+	parentdir="\$(dirname "\$dir")"
+	cp *.mzML \$parentdir
 	
 	"""
 
@@ -90,7 +96,7 @@ process GENERATE_CHANGE_PARAMS {
     script:
     """
 	# generate MSFRAGGER parameter file
-    java -jar /MSFragger.jar --config
+    java -jar /MSFragger.jar --config closed
 
 	# python script to change some parameters
 	python ${change_file_script} \
@@ -157,33 +163,23 @@ process PEPTIDEPROPHET {
     path pepXML
     
     output:
-    path "interact.pep.xml"
+	path "interact*.pep.xml"
     
     script:
-    """
-    workd=\$(pwd)
+	"""
+	workd=\$(pwd)
 
-    cd ${params.workspace}
+	cd ${params.workspace}
 
 	# peptide assignment validation
-    philosopher peptideprophet \
+	philosopher peptideprophet \
 		${params.peptideprophet_args} \
 		--database ${db} \
 		${pepXML}
 
-		: '
-		--combine \
-		--decoy rev_ \
-		--ppm \
-		--accmass \
-		--expectscore \
-		--decoyprobs \
-		--nonparam \
-    	'
+	cp ${params.workspace}/interact*.pep.xml \$workd
 
-    cp ${params.workspace}/interact.pep.xml \$workd
-
-    """
+	"""
 
 }
 
@@ -234,11 +230,13 @@ process FILTER_FDR {
     
     label "philosopher"
 
+	echo true
+
     publishDir "${params.philosopher_dir}/filter_fdr", mode: 'copy'
 
     input:
     path pepxml
-    path protXML
+    path protxml
 
     output:
     val "filtering_done_pseudo"
@@ -253,28 +251,45 @@ process FILTER_FDR {
 			--pepxml ${pepxml}
 
         """
-    else if( params.skip_proteinprophet == false )
+	else if( params.skip_proteinprophet == false && params.combine_peptideprophet == true )
+		"""
+		cd ${params.workspace}
+
+		philosopher filter \
+			${params.philosopher_filter_args} \
+			--pepxml ${pepxml} \
+			--protxml ${protxml}
+
+		"""
+    else if( params.skip_proteinprophet == false && params.combine_peptideprophet == false )
         """
         cd ${params.workspace}
 
 		# filter matches and estimate FDR
-        philosopher filter \
-			${params.philosopher_filter_args} \
-			--pepxml ${pepxml} \
-			--protxml ${protXML}
+		# skip the --sequential parameter
+		philosopher filter \
+			--psm 0.05 \
+			--ion 0.05 \
+			--pep 0.05 \
+			--prot 1 \
+			--razor \
+			--picked \
+			--tag rev_ \
+			--pepxml interact-0*.pep.xml \
+			--protxml interact.prot.xml
 
         """
 
 }
 
-process QUANTIFY {
+process FREEQUANT {
 
     label "philosopher"
 
-    publishDir "${params.philosopher_dir}/quantify", mode: 'copy'
+    publishDir "${params.philosopher_dir}/freequant", mode: 'copy'
 
     input:
-    val filterandfdr
+    val filter_fdr
 
     output:
     val 'freequant_done_pseudo'
@@ -297,6 +312,8 @@ process REPORT {
     
     label "philosopher"
 
+	echo true
+
     publishDir "${params.philosopher_dir}/report", mode: 'copy'
 
     input:
@@ -317,13 +334,47 @@ process REPORT {
 		2> report.out
 
 	cp msstats.csv peptide.tsv psm.tsv ion.tsv  \$workd
+	"""
+
+}
+
+
+process IONQUANT {
+
+    label "ionquant"
+
+    publishDir "${params.philosopher_dir}/ionquant", mode: 'copy'
+
+    input:
+    val filter_fdr
+	path pepXML
+
+    output:
+    path "*_quant.csv"
+
+    script:
+    """
+	workd=\$(pwd)
+    cd ${params.workspace}
+
+	# extract parent dir
+	dir=${params.proteomics_reads}
+    parentdir="\$(dirname "\$dir")"
+	# Perform label-free quantification via 
+	# precursor (MS1) abundances and spectral counting
+	java -jar /IonQuant.jar \
+		--specdir \${parentdir} \
+		--multidir multidir \
+		*.pepXML \
+		&> ionquant.log
+
+	cp *_quant.csv \$workd
+
     """
 
 }
 
 process CLEAN_UP_WORKSPACE {
-
-    echo true
 
     label "philosopher"
 
@@ -364,14 +415,22 @@ workflow PHILOSOPHER_PIPE {
     
 	PROTEINPROPHET(PEPTIDEPROPHET.out)
 
-	FILTER_FDR(PEPTIDEPROPHET.out, PROTEINPROPHET.out)
+	FILTER_FDR(
+		PEPTIDEPROPHET.out,
+		PROTEINPROPHET.out
+	)
 	
-	QUANTIFY(FILTER_FDR.out)
+	FREEQUANT(FILTER_FDR.out)
     
-	REPORT(QUANTIFY.out)
+	REPORT(FREEQUANT.out)
     report = REPORT.out
 
-	CLEAN_UP_WORKSPACE(REPORT.out)
+	IONQUANT(
+        FILTER_FDR.out,
+        MSFRAGGER.out
+    )
+
+	//CLEAN_UP_WORKSPACE(REPORT.out)
 
     emit:
 	report
