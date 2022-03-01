@@ -39,7 +39,7 @@ process EXTRACT_TRANSCRIPT_SEQUENCES {
     path genome
 
     output:
-    path 'transcripts_sequences.out'
+    path 'transcripts_sequences.out', emit: fasta
 
     script:
     """
@@ -67,7 +67,7 @@ process CREATE_TAB_DELIMITED_CDS_FILE {
     path td_CDS_script_py
 
     output:
-    path 'CDS.tsv'
+    path 'CDS.tsv', emit: tsv
 
     script:
     """
@@ -118,16 +118,18 @@ workflow ANNOTATE_PIPE {
 	)
 	longest_pc_transcript_per_gene_gtf = SELECT_LONGEST_CODING_TRANSCRIPT.out
 	
-	longest_pc_transcript_per_gene_fa = EXTRACT_TRANSCRIPT_SEQUENCES(
-											longest_pc_transcript_per_gene_gtf,
-									 		genome_ch
-										)
+	EXTRACT_TRANSCRIPT_SEQUENCES(
+		longest_pc_transcript_per_gene_gtf,
+		genome_ch
+	)
+	longest_pc_transcript_per_gene_fa = EXTRACT_TRANSCRIPT_SEQUENCES.out.fasta
 
-    transcript_id_gene_id_CDS_tsv = CREATE_TAB_DELIMITED_CDS_FILE(
+    CREATE_TAB_DELIMITED_CDS_FILE(
 		longest_pc_transcript_per_gene_gtf,
 		longest_pc_transcript_per_gene_fa,
 		params.ctdCDS_script
 	)
+	transcript_id_gene_id_CDS_tsv = CREATE_TAB_DELIMITED_CDS_FILE.out.tsv
 
     transcript_id_gene_id_CDS_bed = CREATE_BED_CDS_FILE(transcript_id_gene_id_CDS_tsv)
 

@@ -331,6 +331,7 @@ process REPORT {
 	# reports about the findings for easy interpretation
 	philosopher report \
 		--msstats \
+		--decoys \
 		2> report.out
 
 	cp msstats.csv peptide.tsv psm.tsv ion.tsv  \$workd
@@ -362,9 +363,9 @@ process IONQUANT {
     parentdir="\$(dirname "\$dir")"
 	# Perform label-free quantification via 
 	# precursor (MS1) abundances and spectral counting
-	java -jar /IonQuant.jar \
+	java -Xmx${params.ionquant_ram}G -jar /IonQuant.jar \
 		--specdir \${parentdir} \
-		--multidir multidir \
+		--multidir . \
 		*.pepXML \
 		&> ionquant.log
 

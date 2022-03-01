@@ -6,6 +6,7 @@ include { RIBOSEQ_PIPE } from './subworkflows/riboseq.nf'
 include { PULL_CONTAINERS } from './subworkflows/pull_containers.nf'
 include { RIBOTISH_PIPE } from './subworkflows/ribotish.nf'
 include { CHECK_FILES_PIPE } from './subworkflows/check_files.nf'
+include { QC_PIPE } from './subworkflows/qc.nf'
 
 // pull containers channels
 slurm_online_config = Channel.fromPath(params.slurm_config)
@@ -55,7 +56,7 @@ workflow PULLING {
 
 workflow PHILOSOPHER {
 
-	speptides = channel.fromPath("${projectDir}/data/small_peptides_all_quad_samples.fasta")
+	speptides = Channel.fromPath("${projectDir}/data/small_peptides_all_quad_samples.fasta")
 
 	PHILOSOPHER_PIPE(
         speptides,
@@ -64,9 +65,9 @@ workflow PHILOSOPHER {
 
 }
 
-workflow {
+workflow CHECK_FILES {
 
-/*
+
     CHECK_FILES_PIPE(
 		riboseq_reads_ch,
 		proteomics_reads_ch,
@@ -76,21 +77,46 @@ workflow {
 		other_RNAs_sequence_ch,
 		check_files_script_ch
 	)
-*/
 
+}
+
+workflow RIBOTISH {
+
+	verga = Channel.fromPath("${projectDir}/data/verga/*", type: 'dir')
+	RIBOTISH_PIPE(
+        gtf_ch,
+        verga,
+        genome_ch,
+        genome_fai_ch,
+
+    )
+
+}
+
+workflow {
+
+	if ( params.run_qc == true ){
     ANNOTATE_PIPE(  
 		gtf_ch,
 		other_RNAs_sequence_ch,
 		genome_ch,
 	)
 
+	QC_PIPE(
+		genome_ch,
+        riboseq_reads_ch,
+        oligos_ch,
+        other_RNAs_sequence_ch,
+        ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_fa,
+        ANNOTATE_PIPE.out.transcript_id_gene_id_CDS_tsv,
+        gtf_ch
+    )  
+	}
+
     RIBOSEQ_PIPE(  
 		genome_ch,
 		riboseq_reads_ch,
-		oligos_ch,
 		other_RNAs_sequence_ch,
-		ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_fa,
-		ANNOTATE_PIPE.out.transcript_id_gene_id_CDS_tsv,
 		gtf_ch
 	)
 

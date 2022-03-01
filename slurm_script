@@ -8,18 +8,20 @@
 #SBATCH --output=nextflow_run.o%j
 #SBATCH --error=nextflow_run.e%j
 
-nextflow run main.nf -profile slurm_offline -entry PHILOSOPHER
+# nextflow run main.nf -profile slurm_offline -entry PHILOSOPHER
+# nextflow run main.nf -profile slurm_offline -entry RIBOTISH -N pozzan.noe@gmail.com -resume
 
 # Setting "-profile slurm_offline"
 # is necessary bc slurm nodes are not online
-: '
+# ATTENTION: the riboseq read names should not contain ".",
+# apart from the ".fastq.gz"
 nextflow run \
 	main.nf \
 	-profile slurm_offline \
-	-resume //\
+	-resume \
+	-N pozzan.noe@gmail.com //\
 	//--riboseq_reads /path/to/reads \
-	//--proteomics_reads /path/to/reads \
+	//--proteomics_reads /path/to/spectra \
 	//--
-'	
 
 

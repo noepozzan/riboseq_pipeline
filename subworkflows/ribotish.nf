@@ -34,22 +34,25 @@ process RIBOTISH_QUALITY {
 
 process RIBOTISH_PREDICT {
 
+	echo true
+
     label "ribotish"
     label "heavy_computation"
 
     publishDir "${params.ribotish_dir}/ribotish_predict", mode: 'copy'
 
     input:
-    each(path(bam_sort_index_folder))
-    path gtf_file
+	each(path(bam_sort_index_folder))
+    path gtf
     path genome
 	each(path(offsets))
-
+ 
     output:
     path '*.ribotish_pred_all.txt', emit: ribo_pred, optional: true
 
     script:
     """
+
 	input1=\$(basename ${bam_sort_index_folder})
     prefix1=\$(echo \$input1 | cut -d '.' -f 1)
     input2=\$(basename ${offsets})
@@ -61,17 +64,54 @@ process RIBOTISH_PREDICT {
 
 		ribotish predict \
 			-b \${prefix1}.*.bam \
-			-g ${gtf_file} \
+			-g ${gtf} \
 			-f ${genome} \
 			${params.ribotish_predict_mode} \
 			-o \${prefix1}.ribotish_pred.txt \
 			&> \${prefix1}_ribotish_predict.log
 
 	fi
+	
+	"""
+
+}
+
+/*
+process RIBOTISH_PREDICT {
+
+	echo true
+
+    label "ribotish"
+    label "heavy_computation"
+
+    publishDir "${params.ribotish_dir}/ribotish_predict", mode: 'copy'
+
+    input:
+	tuple val(sample_id), path(reads)
+	each(path(gtf))
+	each(path(genome))
+ 
+    output:
+    path '*.ribotish_pred_all.txt', emit: ribo_pred, optional: true
+
+    script:
+    """
+
+	cp ${reads[1]}/* .
+
+	ribotish predict \
+		-b *.bam \
+		-g ${gtf} \
+		-f ${genome} \
+		--ribopara ${reads[0]} \
+		${params.ribotish_predict_mode} \
+		-o ${sample_id}.ribotish_pred.txt \
+		&> ${sample_id}_ribotish_predict.log
 
 	"""
 
 }
+*/
 
 process GFFREAD {
 
@@ -157,26 +197,90 @@ process COMBINE {
 }
 
 
+process MOVE_RENAME {
+
+	echo true
+
+	publishDir "${params.ribotish_dir}/move_rename", mode: 'copy'
+
+	input:
+	path files1
+	path files2
+	path python_script
+
+	output:
+	path "Sample*"
+
+	shell:
+	params.run_predict = true
+	'''
+	workd=$(pwd)
+	
+	python !{python_script} \
+		--dir $workd
+
+	echo $workd
+
+	: '
+	# sort file lists
+	files1_sorted=$(echo !{files1} | xargs -n1 | sort | xargs)
+	files2_sorted=$(echo !{files2} | xargs -n1 | sort | xargs)
+
+	# transform to array
+	read -a arr1 <<< "$files1_sorted"
+	read -a arr2 <<< "$files2_sorted"
+
+	# go through arrays and join
+	for i in "${!arr1[@]}"
+	do
+		echo ["${arr1[$i]}" "${arr2[$i]}"]
+	done
+	'
+	'''
+	
+}
+
+
 workflow RIBOTISH_PIPE {
 
     take:
     gtf_ch
     bam_sort_index_folder_ch
-    genome_ch
+	genome_ch
 	genome_fai_ch
 	
-
     main:
+
     RIBOTISH_QUALITY(
 		bam_sort_index_folder_ch,
 		gtf_ch
 	)
+	offsets = RIBOTISH_QUALITY.out.offset
 
-    RIBOTISH_PREDICT(
+	/*
+	MOVE_RENAME(
+		RIBOTISH_QUALITY.out.offset.collect(),
+		bam_sort_index_folder_ch.collect(),
+		params.rename_script
+	)
+	
+	params.run_predict = false
+	if ( params.run_predict == true ){
+	reads_ch = Channel.fromFilePairs("${projectDir}/results/ribotish/move_rename/Sample_*_{1,2}", type: 'any', checkIfExists: true)
+	
+	RIBOTISH_PREDICT(
+        reads_ch,
+		gtf_ch,
+        genome_ch
+    )
+	}
+	*/
+
+	RIBOTISH_PREDICT(
 		bam_sort_index_folder_ch,
 		gtf_ch,
 		genome_ch,
-		RIBOTISH_QUALITY.out.offset
+		offsets
 	)
     
 	GFFREAD(
@@ -198,18 +302,10 @@ workflow RIBOTISH_PIPE {
 	)
 	speptide_combined = COMBINE.out.combined_prediction
 
-    emit:
-    speptide_combined
+	emit:
+	speptide_combined
 
 }
-
-
-
-
-
-
-
-
 
 
 
