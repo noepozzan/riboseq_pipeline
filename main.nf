@@ -7,6 +7,11 @@ include { PULL_CONTAINERS } from './subworkflows/pull_containers.nf'
 include { RIBOTISH_PIPE } from './subworkflows/ribotish.nf'
 include { CHECK_FILES_PIPE } from './subworkflows/check_files.nf'
 include { QC_PIPE } from './subworkflows/qc.nf'
+include { READS_PIPE } from './subworkflows/prepare_reads.nf'
+include { GENOME_PIPE } from './subworkflows/map_genome.nf'
+include { rRNA_PIPE } from './subworkflows/map_rrna.nf'
+include { TRANSCRIPTOME_PIPE } from './subworkflows/map_transcriptome.nf'
+include { QC_ONLY_PIPE } from './subworkflows/qc_only.nf'
 
 // pull containers channels
 slurm_online_config = Channel.fromPath(params.slurm_config)
@@ -93,6 +98,7 @@ workflow RIBOTISH {
 
 }
 
+/*
 workflow {
 
 	if ( params.run_qc == true ){
@@ -134,5 +140,68 @@ workflow {
 	)
 
 }
+
+*/
+
+workflow {
+
+	READS_PIPE(
+		riboseq_reads_ch
+	)
+	fasta_reads = READS_PIPE.out
+
+	rRNA_PIPE(
+		genome_ch,
+		other_RNAs_sequence_ch,
+		fasta_reads
+	)
+	rrna_unmapped = rRNA_PIPE.out.other_genes_unmapped_fasta
+	rrna_mapped_sam = rRNA_PIPE.out.other_genes_mapped_sam
+
+	GENOME_PIPE(
+		genome_ch,
+		gtf_ch,
+		rrna_unmapped
+	)
+	genome_bam_folder = GENOME_PIPE.out
+
+	if ( params.run_qc == true ){
+	ANNOTATE_PIPE(
+        gtf_ch,
+        other_RNAs_sequence_ch,
+        genome_ch,
+    )
+
+	TRANSCRIPTOME_PIPE(
+		ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_fa,
+		rrna_unmapped
+	)
+	transcripts_mapped_unique_sam = TRANSCRIPTOME_PIPE.out.transcripts_mapped_unique_sam
+	transcriptome_bam_folder = TRANSCRIPTOME_PIPE.out.bam_bai_folder
+	
+	QC_ONLY_PIPE(
+		oligos_ch,
+		ANNOTATE_PIPE.out.transcript_id_gene_id_CDS_tsv,
+		transcripts_mapped_unique_sam,
+		transcriptome_bam_folder,
+		rrna_mapped_sam
+	)
+	}
+
+	RIBOTISH_PIPE(
+        gtf_ch,
+        genome_bam_folder,
+        genome_ch,
+        genome_fai_ch,
+
+    )
+
+    PHILOSOPHER_PIPE(
+        RIBOTISH_PIPE.out.speptide_combined,
+        proteomics_reads_ch
+    )
+	
+}
+
 
 

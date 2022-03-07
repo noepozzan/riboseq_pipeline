@@ -25,29 +25,6 @@ process SEGEMEHL_INDEX_rRNA {
 
 }
 
-process SEGEMEHL_INDEX_TRANSCRIPTOME {
-
-    label "segemehl"
-
-    publishDir "${params.riboseq_dir}/segemehl_index_transcriptome", mode: 'copy'
-
-    input:
-    path sequence
-
-    output:
-    path 'segemehl_index_transcriptome'
-
-    script:
-    """
-    segemehl.x \
-    	-x segemehl_index_transcriptome \
-    	-d ${sequence} \
-    	2> segemehl_index_transcriptome.log
-
-    """
-
-}
-
 process STAR_INDEX_GENOME {
 
     label 'star'
