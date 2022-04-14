@@ -6,7 +6,8 @@ process COUNT_OLIGOS {
     
     label "htseq_biopython"
 
-    publishDir "${params.qc_dir}/count_oligos", mode: 'copy'
+    publishDir "${params.qc_dir}/count_oligos", mode: 'copy', pattern: '*_oligos_counts'
+    publishDir "${params.log_dir}/count_oligos", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(reads))
@@ -14,7 +15,8 @@ process COUNT_OLIGOS {
     path py_script
 
     output:
-    path '*_oligos_counts'
+    path '*_oligos_counts', emit: counts
+	path '*.log', emit: log
 
     script:
     """
@@ -25,7 +27,7 @@ process COUNT_OLIGOS {
 		--fastq <(gunzip -c ${reads}) \
         --oligos ${oligos} \
         --out \${prefix}_oligos_counts \
-		2> \${prefix}_count_oligos.log
+		&> \${prefix}_count_oligos.log
 
     """
 
@@ -35,7 +37,8 @@ process COUNT_OVERREPRESENTED_SEQUENCES_OTHER {
     
     label "pysam"
 
-    publishDir "${params.qc_dir}/count_overrepresented_sequences_other", mode: 'copy'
+    publishDir "${params.qc_dir}/count_overrepresented_sequences_other", mode: 'copy', pattern: '*.overrepresented_sequences_counts'
+    publishDir "${params.log_dir}/count_overrepresented_sequences_other", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(sam))
@@ -43,6 +46,7 @@ process COUNT_OVERREPRESENTED_SEQUENCES_OTHER {
 
     output:
     path '*.overrepresented_sequences_counts', emit: sequences
+	path '*.log', emit: log
 
     script:
     """
@@ -51,8 +55,8 @@ process COUNT_OVERREPRESENTED_SEQUENCES_OTHER {
 
     python ${script_py} \
 		--sam ${sam} \
-		--out \${prefix}.overrepresented_sequences_counts 2> \
-		\${prefix}_count_overrepresented_sequences_other.log
+		--out \${prefix}.overrepresented_sequences_counts \
+		&> \${prefix}_count_overrepresented_sequences_other.log
     
     : '
     grep -P -v \"^@\" ${sam} \
@@ -70,14 +74,16 @@ process READ_LENGTH_HISTOGRAM {
     
     label "rcrunch_python"
 
-    publishDir "${params.qc_dir}/read_length_histogram", mode: 'copy'
+    publishDir "${params.qc_dir}/read_length_histogram", mode: 'copy', pattern: '*'
+    publishDir "${params.log_dir}/read_length_histogram", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(sam))
     path script_py
 
     output:
-    path '*'
+    path '*', emit: hist
+	path '*.log', emit: log
 
     script:
     """
@@ -86,9 +92,9 @@ process READ_LENGTH_HISTOGRAM {
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
     python ${script_py} \
-	--sam ${sam} \
-	--outdir \${prefix} \
-	2> \${prefix}_read_length_histogram.log
+		--sam ${sam} \
+		--outdir \${prefix} \
+		&> \${prefix}_read_length_histogram.log
 
     """
 
@@ -98,7 +104,8 @@ process DETERMINE_P_SITE_OFFSET {
     
     label "pysam"
 
-    publishDir "${params.qc_dir}/determine_p_site_offset", mode: 'copy'
+    publishDir "${params.qc_dir}/determine_p_site_offset", mode: 'copy', pattern: '*.alignment_offset.json'
+    publishDir "${params.log_dir}/determine_p_site_offset", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(bam_folder))
@@ -107,6 +114,7 @@ process DETERMINE_P_SITE_OFFSET {
 
     output:
     path '*.alignment_offset.json', emit: offsets
+    path '*.log', emit: log
 
     script:
     """
@@ -123,7 +131,7 @@ process DETERMINE_P_SITE_OFFSET {
 		--bam \${prefix}.*.bam \
 		--cds_coordinates ${transcript_id_gene_id_CDS} \
 		--outdir \${prefix}_p_site_offset \
-		2> \${prefix}_p_site_offset.log
+		&> \${prefix}_p_site_offset.log
 
     cp \${prefix}_p_site_offset/* .
     mv alignment_offset.json \${prefix}.alignment_offset.json
@@ -136,7 +144,8 @@ process COUNT_READS {
 
     label "pysam"
 
-    publishDir "${params.qc_dir}/count_reads", mode: 'copy'
+    publishDir "${params.qc_dir}/count_reads", mode: 'copy', pattern: '*.counts.tsv'
+    publishDir "${params.log_dir}/count_reads", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(bam_folder_offsets))
@@ -144,7 +153,8 @@ process COUNT_READS {
     path script_py
 
     output:
-    path '*.counts.tsv' optional true
+    path '*.counts.tsv', emit: counts, optional: true
+	path '*.log', emit: log
 
     script:
     """
@@ -160,7 +170,8 @@ process COUNT_READS {
     	--bam *.bam \
         --tsv ${transcript_id_gene_id_CDS} \
         --json ${bam_folder_offsets[1]} \
-        --outdir \${prefix}.count_reads
+        --outdir \${prefix}.count_reads \
+		&> \${prefix}.count_reads.log
 
     cp \${prefix}.count_reads/* .
 	mv counts.tsv \${prefix}.counts.tsv
@@ -173,7 +184,8 @@ process CHECK_PERIODICITY {
 
     label "rcrunch_python"
 
-    publishDir "${params.qc_dir}/check_periodicity", mode: 'copy'
+    publishDir "${params.qc_dir}/check_periodicity", mode: 'copy', pattern: '{*.periodicity_start.pdf, *.periodicity_stop.pdf, *.Periodicity_Analysis_Start_Ribo_Seq.txt}'
+    publishDir "${params.log_dir}/check_periodicity", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(bam_folder_offsets))
@@ -181,9 +193,9 @@ process CHECK_PERIODICITY {
     path script_py
 
     output:
-    path '*.periodicity_start.pdf' optional true
-    path '*.periodicity_stop.pdf' optional true
-    path '*.Periodicity_Analysis_Start_Ribo_Seq.txt' optional true
+    path '*.periodicity_start.pdf', emit: start, optional: true
+    path '*.periodicity_stop.pdf', emit: stop, optional: true
+    path '*.Periodicity_Analysis_Start_Ribo_Seq.txt', emit: txt, optional: true
 
     script:
     """
@@ -193,7 +205,7 @@ process CHECK_PERIODICITY {
 
 	cp ${bam_folder_offsets[0]}/* .
 
-	mkdir \${prefix1}.check_periodicity
+	mkdir \${prefix}.check_periodicity
 
 	python ${script_py} \
     	--bam *.bam \
@@ -201,14 +213,12 @@ process CHECK_PERIODICITY {
        	--json ${bam_folder_offsets[1]} \
        	--outdir \${prefix}.check_periodicity \
        	--codnum ${params.check_peridocitiy_codnum} \
-        2> \${prefix}_check_periodicity.log
+        &> \${prefix}_check_periodicity.log
 
     	cp \${prefix}.check_periodicity/* .
     	mv periodicity_start.pdf \${prefix}.periodicity_start.pdf
 		mv periodicity_stop.pdf \${prefix}.periodicity_stop.pdf
 		mv Periodicity_Analysis_Start_Ribo_Seq.txt \${prefix}.Periodicity_Analysis_Start_Ribo_Seq.txt
-
-    fi
 
     """
 
@@ -218,14 +228,16 @@ process FILTER_LENGTHS_OFFSETS {
     
     label "pysam"
 
-    publishDir "${params.qc_dir}/filter_lengths_offsets", mode: 'copy'
+    publishDir "${params.qc_dir}/filter_lengths_offsets", mode: 'copy', pattern: '*.unique_a_site.bam'
+    publishDir "${params.log_dir}/filter_lengths_offsets", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(bam_folder_offsets))
     path script_py
 
     output:
-    path '*.unique_a_site.bam' optional true
+    path '*.unique_a_site.bam', emit: unique, optional: true
+	path '*.log', emit: log
 
     script:
     """
@@ -239,7 +251,7 @@ process FILTER_LENGTHS_OFFSETS {
 		--bam *.bam \
 		--p_site_offsets ${bam_folder_offsets[1]} \
 		--bam_out \${prefix}.unique_a_site.bam \
-		2> \${prefix}_filter_lengths_offsets.log
+		&> \${prefix}_filter_lengths_offsets.log
 	
     """
 
@@ -249,15 +261,17 @@ process BAM_SORT_AND_INDEX {
     
     label "samtools"
 
-    publishDir "${params.qc_dir}/bam_sort_and_index", mode: 'copy'
+    publishDir "${params.qc_dir}/bam_sort_and_index", mode: 'copy', pattern: '{*.bam, *.bam.bai, *.bam_sort_index}'
+    publishDir "${params.log_dir}/bam_sort_and_index", mode: 'copy', pattern: '*.log'
 
     input:
     path bam
 
     output:
-    path '*.bam'
-    path '*.bam.bai'
-    path '*.bam_sort_index'
+    path '*.bam', emit: bam
+    path '*.bam.bai', emit: bai
+    path '*.bam_sort_index', emit: folder
+	path '*.log', emit: log
 
     script:
     """
@@ -287,11 +301,11 @@ workflow QC_ONLY_PIPE {
 
     main:   
 	if ( params.run_count_oligos == "true" ) {
-	COUNT_OLIGOS(
-		reads_ch,
-		oligos_ch,
-		params.count_oligos_script
-	)
+		COUNT_OLIGOS(
+			reads_ch,
+			oligos_ch,
+			params.count_oligos_script
+		)
     }
 
     COUNT_OVERREPRESENTED_SEQUENCES_OTHER(
@@ -327,13 +341,13 @@ workflow QC_ONLY_PIPE {
 		transcript_id_gene_id_CDS,
 		params.check_periodicity_script
 	)
-      
+
 	FILTER_LENGTHS_OFFSETS(
 		bam_folder_offsets,
 		params.filter_lengths_offsets_script
 	)
-    transcripts_mapped_unique_a_site_profile_bam = FILTER_LENGTHS_OFFSETS.out  
-    
+    transcripts_mapped_unique_a_site_profile_bam = FILTER_LENGTHS_OFFSETS.out.unique
+
 	BAM_SORT_AND_INDEX(
 		transcripts_mapped_unique_a_site_profile_bam
 	)	

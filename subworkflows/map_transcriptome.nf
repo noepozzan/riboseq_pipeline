@@ -6,21 +6,24 @@ nextflow.enable.dsl=2
 process SEGEMEHL_INDEX_TRANSCRIPTOME {
 
     label "segemehl"
+	label 'indexing'
 
-    publishDir "${params.map_dir}/segemehl_index_transcriptome", mode: 'copy'
+    publishDir "${params.map_dir}/segemehl_index_transcriptome", mode: 'copy', pattern: 'segemehl_index_transcriptome'
+    publishDir "${params.log_dir}/segemehl_index_transcriptome", mode: 'copy', pattern: '*.log'
 
     input:
     path sequence
 
     output:
-    path 'segemehl_index_transcriptome'
+    path 'segemehl_index_transcriptome', emit: index
+	path '*.log', emit: log
 
     script:
     """
     segemehl.x \
     	-x segemehl_index_transcriptome \
     	-d ${sequence} \
-    	2> segemehl_index_transcriptome.log
+    	&> segemehl_index_transcriptome.log
 
     """
 
@@ -29,8 +32,10 @@ process SEGEMEHL_INDEX_TRANSCRIPTOME {
 process MAP_TRANSCRIPTOME_SEGEMEHL {
     
     label "segemehl"
+	label 'mapping'
 
-    publishDir "${params.map_dir}/map_transcriptome_segemehl", mode: 'copy'
+    publishDir "${params.map_dir}/map_transcriptome_segemehl", mode: 'copy', pattern: "{*.transcripts_mapped_sam, *.transcripts_unmapped_fa}"
+    publishDir "${params.log_dir}/map_transcriptome_segemehl", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(reads))
@@ -40,6 +45,7 @@ process MAP_TRANSCRIPTOME_SEGEMEHL {
     output:
     path '*.transcripts_mapped_sam', emit: mapped
     path '*.transcripts_unmapped_fa', emit: unmapped
+	path '*.log', emit: log
 
     script:
     """
@@ -53,7 +59,7 @@ process MAP_TRANSCRIPTOME_SEGEMEHL {
 		${params.segemehl_args} \
 		-o \${prefix}.transcripts_mapped_sam \
 		-u \${prefix}.transcripts_unmapped_fa \
-		2> \${prefix}_map_to_transcripts.log
+		&> \${prefix}_map_to_transcripts.log
 	
 	"""
 
@@ -61,26 +67,27 @@ process MAP_TRANSCRIPTOME_SEGEMEHL {
 
 process REMOVE_MULTIMAPPERS {
     
-    // basic container like alpine
     label "pysam"
 
-    publishDir "${params.map_dir}/remove_multimappers", mode: 'copy'
+    publishDir "${params.map_dir}/remove_multimappers", mode: 'copy', pattern: '*.transcripts_mapped_unique_sam'
+    publishDir "${params.log_dir}/remove_multimappers", mode: 'copy', pattern: '*.log'
 
     input:
     path transcripts_mapped_sam
 
     output:
-    path '*.transcripts_mapped_unique_sam'
+    path '*.transcripts_mapped_unique_sam', emit: unique
+	path '*.log', emit: log
 
     script:
     """
     input=\$(basename ${transcripts_mapped_sam})
     prefix=\$(echo \$input | cut -d '.' -f 1)
 
-    grep -P \"^@|\tNH:i:1\t\" \
+    (grep -P \"^@|\tNH:i:1\t\" \
 		${transcripts_mapped_sam} \
-		> \${prefix}.transcripts_mapped_unique_sam \
-		2> \${prefix}_remove_multimappers.log
+		> \${prefix}.transcripts_mapped_unique_sam) \
+		&> \${prefix}_remove_multimappers.log
 
     """
 
@@ -90,7 +97,8 @@ process SAM_TO_BAM_SORT_AND_INDEX {
     
     label "samtools"
 
-    publishDir "${params.map_dir}/sam_to_bam_sort_and_index", mode: 'copy'
+    publishDir "${params.map_dir}/sam_to_bam_sort_and_index", mode: 'copy', pattern: '{*.sorted_indexed.bam, *.sorted_indexed.bam.bai, *.folder_sorted_indexed_bam}'
+    publishDir "${params.log_dir}/sam_to_bam_sort_and_index", mode: 'copy', pattern: '*.log'
 
     input:
     path sam
@@ -98,7 +106,8 @@ process SAM_TO_BAM_SORT_AND_INDEX {
     output:
     path '*.sorted_indexed.bam', emit: bam
     path '*.sorted_indexed.bam.bai', emit: bai
-    path '*.folder_sorted_indexed_bam',emit: folder
+    path '*.folder_sorted_indexed_bam', emit: folder
+	path '*.log', emit: log
 
     script:
     """
@@ -108,7 +117,7 @@ process SAM_TO_BAM_SORT_AND_INDEX {
     samtools view -bS ${sam} \
 		| samtools sort - > \${prefix}.sorted_indexed.bam; \
 		samtools index \${prefix}.sorted_indexed.bam; \
-		2> \${prefix}_bam_sorted_and_indexed.log
+		&> \${prefix}_bam_sorted_and_indexed.log
 
     mkdir \${prefix}.folder_sorted_indexed_bam
     cp \${prefix}.sorted* \${prefix}.folder_sorted_indexed_bam
@@ -126,7 +135,10 @@ workflow TRANSCRIPTOME_PIPE {
 
     main:   
 	// generate index for later mapping
-	transcriptome_index = SEGEMEHL_INDEX_TRANSCRIPTOME(longest_pc_transcript_per_gene_fa)
+	SEGEMEHL_INDEX_TRANSCRIPTOME(
+		longest_pc_transcript_per_gene_fa
+	)
+	transcriptome_index = SEGEMEHL_INDEX_TRANSCRIPTOME.out.index
 
 	// map the filtered reads to the transcriptome to then do QC
 	MAP_TRANSCRIPTOME_SEGEMEHL(
@@ -140,7 +152,7 @@ workflow TRANSCRIPTOME_PIPE {
 	REMOVE_MULTIMAPPERS(
 		transcripts_mapped_sam
 	)
-	transcripts_mapped_unique_sam = REMOVE_MULTIMAPPERS.out
+	transcripts_mapped_unique_sam = REMOVE_MULTIMAPPERS.out.unique
 	
 	SAM_TO_BAM_SORT_AND_INDEX(
 		transcripts_mapped_unique_sam

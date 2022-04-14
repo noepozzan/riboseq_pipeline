@@ -13,35 +13,24 @@ process WORKSPACE {
     path ribotish_speptide
 
 	output:
-	val 'tubel'
+	val 'workspace_initialized'
 
     script:
     """
-	# create new working directory (remove old if applicable,
-	# to be sure that there is a fresh new workspace)
-    rm -rf ${params.workspace}
-    mkdir ${params.workspace}
+	# idea: create a workspace to combine all results
+	# and subworkspaces for each file
+	rm -rf ${params.workspace}
+	mkdir ${params.workspace}
 
-	# move input files to working directory
+	parent_dir=${params.proteomics_reads}
+    parentdir="\$(dirname "\$parent_dir")"
+	
+	cp -R -n -p \$parentdir/*.mzML ${params.workspace}/
+	cp -R -n -p ${ribotish_speptide} ${params.workspace}/
 
-	for VAR in ${params.proteomics_reads}
-	do
-    	mv \$VAR ${params.workspace}/
-	done
-
-	# move the predicted sPeptides file to the workspace
-    mv ${ribotish_speptide} ${params.workspace}/
-
-    # initialize philosopher in the philosopher
-    # working directory which is called workspace
-    cd ${params.workspace}
-    philosopher workspace --clean
-    philosopher workspace --init
-
-	# copy input files back to data folder as a backup
-    dir=${params.proteomics_reads}
-	parentdir="\$(dirname "\$dir")"
-	cp *.mzML \$parentdir
+	cd ${params.workspace}	
+	philosopher workspace --clean
+	philosopher workspace --init
 	
 	"""
 
@@ -51,32 +40,34 @@ process DATABASE {
 
     label 'philosopher'
     
-    publishDir "${params.philosopher_dir}/database", mode: 'copy'
+    publishDir "${params.philosopher_dir}/database", mode: 'copy', pattern: '*.fas'
+    publishDir "${params.log_dir}/database", mode: 'copy', pattern: '*.log'
 
     input:
     val workspace
     path db
 
     output:
-    path '*.fas'
+    path '*.fas', emit: fas
+	path '*.log', emit: log
 
     script:
     """
     workd=\$(pwd)
-
 	# same pattern always:
 	# change into working directory, execute command,
 	# then copy the generated output files back to
 	# nextflow directory to allow nextflow to track files
-    cd ${params.workspace}
-    
+	cd ${params.workspace}
+
 	philosopher database \
 		--custom ${db} \
-		--contam
-    
-    cp ${params.workspace}/*.fas \$workd
+		--contam \
+		&> database.log
+	
+    cp -R -n -p *.fas database.log \$workd
 
-    """
+	"""
 
 }
 
@@ -84,14 +75,16 @@ process GENERATE_CHANGE_PARAMS {
 
     label 'msfragger'
 
-    publishDir "${params.philosopher_dir}/generate_change_params", mode: 'copy'
+    publishDir "${params.philosopher_dir}/generate_change_params", mode: 'copy', pattern: 'msfragger.params'
+    publishDir "${params.log_dir}/generate_change_params", mode: 'copy', pattern: '*.log'
 
     input:
     path db
     path change_file_script
 
     output:
-    path 'msfragger.params'
+    path 'msfragger.params', emit: params
+	path '*.log', emit: log
 
     script:
     """
@@ -108,8 +101,8 @@ process GENERATE_CHANGE_PARAMS {
 	# copy params file to the working directory
 	# since this process took place in some subdirectory
     cp msfragger.params ${params.workspace}
-
-    """
+	
+	"""
 
 }
 
@@ -118,35 +111,29 @@ process MSFRAGGER {
     label "msfragger"
 
     publishDir "${params.philosopher_dir}/msfragger/", mode: 'copy'
+    publishDir "${params.log_dir}/msfragger/", mode: 'copy', pattern: '*.log'
 
     input:
-    path mzML_file
     path closed_fragger
     path db_file
-
+	
     output:
-    path '*.pepXML'
+    path '*.pepXML', emit: pepXML
+	path '*.log', emit: log
     
     script:
 	"""
 	workd=\$(pwd)	
 
-	# change to working directory
 	cd ${params.workspace}
-
-	# search for matches of the predicted peptides
-	# in the peptiomics data
-	for VAR in ${mzML_file}
-	do
-
-	java -Xmx${params.fragger_ram}g \
+	java \
+		-Xmx${params.fragger_ram}g \
 		-jar /MSFragger.jar \
 		${closed_fragger} \
-		\${VAR} 
+		*.mzML \
+		&> msfragger.log
 
-	done
-
-	cp *.pepXML \$workd
+	cp *.pepXML msfragger.log \$workd
 
 	"""
 
@@ -156,28 +143,30 @@ process PEPTIDEPROPHET {
     
     label "philosopher"
 
-    publishDir "${params.philosopher_dir}/peptideprophet", mode: 'copy'
+    publishDir "${params.philosopher_dir}/peptideprophet", mode: 'copy', pattern: 'interact.pep.xml'
+    publishDir "${params.log_dir}/peptideprophet", mode: 'copy', pattern: '*.log'
        
     input:
     path db
     path pepXML
     
     output:
-	path "interact*.pep.xml"
+    path "interact.pep.xml", emit: combined_pepxml
     
-    script:
+	script:
 	"""
 	workd=\$(pwd)
-
+	
+	# peptide assignment validation on all files at once
 	cd ${params.workspace}
-
-	# peptide assignment validation
 	philosopher peptideprophet \
 		${params.peptideprophet_args} \
+		--combine \
 		--database ${db} \
-		${pepXML}
+		*.pepXML \
+		&> peptideprophet.log
 
-	cp ${params.workspace}/interact*.pep.xml \$workd
+	cp ${params.workspace}/interact.pep.xml peptideprophet.log \$workd
 
 	"""
 
@@ -187,14 +176,16 @@ process PROTEINPROPHET {
     
     label "philosopher"
 
-    publishDir "${params.philosopher_dir}/proteinprophet", mode: 'copy'
+    publishDir "${params.philosopher_dir}/proteinprophet", mode: 'copy', pattern: 'interact.prot.xml'
+    publishDir "${params.log_dir}/proteinprophet", mode: 'copy', pattern: '*.log'
        
     input:
     path pepxml
     
     output:
-    path "interact.prot.xml"
-     
+    path "interact.prot.xml", emit: interact_prot_xml
+	path "*.log", optional: true, emit: log
+
     script:
     if( params.skip_proteinprophet == true )
         """
@@ -218,9 +209,9 @@ process PROTEINPROPHET {
 		# present in in the original sample
 		philosopher proteinprophet \
 			${pepxml} \
-			2> proteinprophet.out
+			2> proteinprophet.log
 
-        cp ${params.workspace}/interact.prot.xml \$workd
+        cp ${params.workspace}/interact.prot.xml proteinprophet.log \$workd
 
         """
 
@@ -230,39 +221,46 @@ process FILTER_FDR {
     
     label "philosopher"
 
-	echo true
-
-    publishDir "${params.philosopher_dir}/filter_fdr", mode: 'copy'
+    publishDir "${params.philosopher_dir}/filter_fdr", mode: 'copy', pattern: 'filter_done'
+    publishDir "${params.log_dir}/filter_fdr", mode: 'copy', pattern: '*.log'
 
     input:
     path pepxml
     path protxml
 
     output:
-    val "filtering_done_pseudo"
+    val "filter_done", emit: filter_done
+	path "*.log", emit: log
  
     script:
     if( params.skip_proteinprophet == true )
         """
+		workd=\$(pwd)
         cd ${params.workspace}
 
         philosopher filter \
 			${params.philosopher_filter_args} \
-			--pepxml ${pepxml}
+			--pepxml ${pepxml} \
+			&> filter_fdr.log
 
+		cp filter_fdr.log \$workd
         """
 	else if( params.skip_proteinprophet == false && params.combine_peptideprophet == true )
 		"""
+		workd=\$(pwd)
 		cd ${params.workspace}
 
 		philosopher filter \
 			${params.philosopher_filter_args} \
 			--pepxml ${pepxml} \
-			--protxml ${protxml}
+			--protxml ${protxml} \
+			&> filter_fdr.log
 
+		cp *filter_fdr.log \$workd
 		"""
     else if( params.skip_proteinprophet == false && params.combine_peptideprophet == false )
         """
+		workd=\$(pwd)
         cd ${params.workspace}
 
 		# filter matches and estimate FDR
@@ -276,51 +274,57 @@ process FILTER_FDR {
 			--picked \
 			--tag rev_ \
 			--pepxml interact-0*.pep.xml \
-			--protxml interact.prot.xml
+			--protxml interact.prot.xml \
+			&> filter_fdr.log
 
+		cp filter_fdr.log \$workd
         """
 
 }
 
 process FREEQUANT {
 
-    label "philosopher"
-
-    publishDir "${params.philosopher_dir}/freequant", mode: 'copy'
+    label "philosopher2"
+    
+	publishDir "${params.philosopher_dir}/freequant", mode: 'copy', pattern: 'freequant_done'
+    publishDir "${params.log_dir}/freequant", mode: 'copy', pattern: '*.log'
 
     input:
     val filter_fdr
 
     output:
-    val 'freequant_done_pseudo'
+    val 'freequant_done', emit: freequant_done
+	path '*.log', emit: log
 
     script:
     """
-    cd ${params.workspace}
-
+	workd=\$(pwd)
 	# Perform label-free quantification via 
 	# precursor (MS1) abundances and spectral counting
+    cd ${params.workspace}
     philosopher freequant \
 		--dir . \
-		2> freequant.out
+		2> freequant.log
 
+	cp freequant.log \$workd
     """
 
 }
 
 process REPORT {
-    
+
     label "philosopher"
 
-	echo true
-
-    publishDir "${params.philosopher_dir}/report", mode: 'copy'
+    publishDir "${params.philosopher_dir}/report", mode: 'copy', pattern: '{msstats.csv, *.tsv}'
+    publishDir "${params.log_dir}/report", mode: 'copy', pattern: '*.log'
 
     input:
     val freequant
 
     output:
-    path '*'
+    path 'msstats.csv', emit: msstats
+	path '*.tsv', emit: tsv
+	path '*.log', emit: log
  
     script:
     """
@@ -332,9 +336,10 @@ process REPORT {
 	philosopher report \
 		--msstats \
 		--decoys \
-		2> report.out
+		&> report.log
 
-	cp msstats.csv peptide.tsv psm.tsv ion.tsv  \$workd
+	cp msstats.csv peptide.tsv psm.tsv ion.tsv report.log \$workd
+
 	"""
 
 }
@@ -344,14 +349,16 @@ process IONQUANT {
 
     label "ionquant"
 
-    publishDir "${params.philosopher_dir}/ionquant", mode: 'copy'
+    publishDir "${params.philosopher_dir}/ionquant", mode: 'copy', pattern: '*_quant.csv'
+    publishDir "${params.log_dir}/ionquant", mode: 'copy', pattern: '*.log'
 
     input:
     val filter_fdr
 	path pepXML
 
     output:
-    path "*_quant.csv"
+    path "*_quant.csv", emit: quant_csv
+	path "*.log", emit: log
 
     script:
     """
@@ -369,7 +376,7 @@ process IONQUANT {
 		*.pepXML \
 		&> ionquant.log
 
-	cp *_quant.csv \$workd
+	cp *_quant.csv ionquant.log \$workd
 
     """
 
@@ -377,63 +384,85 @@ process IONQUANT {
 
 process CLEAN_UP_WORKSPACE {
 
-    label "philosopher"
+	label "philosopher"
 
-    input:
-    path report
+	input:
+	path report
 
-    script:
-    """
+	script:
+	"""
 
-    cd ${params.workspace}
-    cd ..
-    rm -rf ${params.workspace}
+	cd ${params.workspace}
+	cd ..
+	rm -rf ${params.workspace}
 
-    """
+	"""
 
 }
 
-workflow PHILOSOPHER_PIPE {
+workflow PHILOSOPHER {
 
     take:
     ribotish_predict_ch
     proteomics_reads
 
     main:
-    WORKSPACE(ribotish_predict_ch)
-
-    DATABASE(WORKSPACE.out, ribotish_predict_ch)
-    
-	GENERATE_CHANGE_PARAMS(DATABASE.out, params.change_params_script)
-    
-	MSFRAGGER(
-		proteomics_reads.collect(),
-		GENERATE_CHANGE_PARAMS.out,
-		DATABASE.out
+	WORKSPACE(
+		ribotish_predict_ch,
 	)
-    
-	PEPTIDEPROPHET(DATABASE.out, MSFRAGGER.out)
-    
-	PROTEINPROPHET(PEPTIDEPROPHET.out)
 
-	FILTER_FDR(
-		PEPTIDEPROPHET.out,
-		PROTEINPROPHET.out
+	DATABASE(
+		WORKSPACE.out.collect(),
+		ribotish_predict_ch
+	)
+
+	GENERATE_CHANGE_PARAMS(
+		DATABASE.out.fas,
+		params.change_params_script
+	)
+
+	MSFRAGGER(
+		GENERATE_CHANGE_PARAMS.out.params,
+		DATABASE.out.fas
 	)
 	
-	FREEQUANT(FILTER_FDR.out)
+	PEPTIDEPROPHET(
+		DATABASE.out.fas,
+		MSFRAGGER.out.pepXML
+	)
+	
+	PROTEINPROPHET(
+		PEPTIDEPROPHET.out.combined_pepxml
+	)
+
+	FILTER_FDR(
+		PEPTIDEPROPHET.out.combined_pepxml,
+		PROTEINPROPHET.out.interact_prot_xml
+	)
+	
+	FREEQUANT(
+		FILTER_FDR.out.filter_done
+	)
     
-	REPORT(FREEQUANT.out)
-    report = REPORT.out
+	REPORT(
+		FREEQUANT.out.freequant_done
+	)
 
 	IONQUANT(
-        FILTER_FDR.out,
-        MSFRAGGER.out
+        FILTER_FDR.out.filter_done,
+        MSFRAGGER.out.pepXML
     )
 
-	//CLEAN_UP_WORKSPACE(REPORT.out)
+	//CLEAN_UP_WORKSPACE(REPORT.out.msstats)
+
+	// set output variables from this workflow
+	report = REPORT.out.msstats
+    msfragger_params = GENERATE_CHANGE_PARAMS.out.params
+    ionquant = IONQUANT.out.quant_csv
 
     emit:
 	report
+	msfragger_params
+	ionquant
 
 }

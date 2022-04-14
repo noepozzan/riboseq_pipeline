@@ -6,13 +6,15 @@ process TRIM_FIRST_BASES {
 
     label "cutadapt"
 
-    publishDir "${params.reads_dir}/trim_first_bases", mode: 'copy'
+    publishDir "${params.reads_dir}/trim_first_bases", mode: 'copy', pattern: '*.trimmed_first_bases'
+    publishDir "${params.log_dir}/trim_first_bases", mode: 'copy', pattern: '*.log'
 
     input:
     path reads
 
     output:
-    path '*.trimmed_first_bases'
+    path '*.trimmed_first_bases', emit: trimmed_first_bases
+	path '*.log', emit: log
 
     script:
     """
@@ -34,13 +36,15 @@ process CLIP_READS {
     
     label "fastx"
 
-    publishDir "${params.reads_dir}/clip_reads", mode: 'copy'
+    publishDir "${params.reads_dir}/clip_reads", mode: 'copy', pattern: '*.pro_clipped'
+    publishDir "${params.log_dir}/clip_reads", mode: 'copy', pattern: '*.log'
 
     input:
     path reads
 
     output:
-    path '*.pro_clipped'
+    path '*.pro_clipped', emit: pro_clipped
+	path '*.log', emit: log
 
     script:
     """
@@ -65,13 +69,15 @@ process TRIM_READS {
 
     label "fastx"
 
-    publishDir "${params.reads_dir}/trim_reads", mode: 'copy'
+    publishDir "${params.reads_dir}/trim_reads", mode: 'copy', pattern: '*.pro_trimmed'
+    publishDir "${params.log_dir}/trim_reads", mode: 'copy', pattern: '*.log'
 
     input:
     path reads
 
     output:
-    path '*.pro_trimmed'
+    path '*.pro_trimmed', emit: pro_trimmed
+	path '*.log', emit: log
 
     script:
     """
@@ -92,13 +98,15 @@ process FILTER_READS {
     
     label "fastx"
 
-    publishDir "${params.reads_dir}/filter_reads", mode: 'copy'
+    publishDir "${params.reads_dir}/filter_reads", mode: 'copy', pattern: '*.pro_filtered'
+    publishDir "${params.log_dir}/filter_reads", mode: 'copy', pattern: '*.log'
 
     input:
     path reads
 
     output:
-    path '*.pro_filtered'
+    path '*.pro_filtered', emit: pro_filtered
+	path '*.log', emit: log
 
     script:
     """
@@ -119,13 +127,15 @@ process FASTQ_TO_FASTA {
     
     label "fastx"
 
-    publishDir "${params.reads_dir}/fastq_to_fasta", mode: 'copy'
+    publishDir "${params.reads_dir}/fastq_to_fasta", mode: 'copy', pattern: '*.pro_filtered_fasta'
+    publishDir "${params.log_dir}/fastq_to_fasta", mode: 'copy', pattern: '*.log'
 
     input:
     path reads
 
     output:
-    path '*.pro_filtered_fasta'
+    path '*.pro_filtered_fasta', emit: fasta
+	path '*.log', emit: log
 
     script:
     """
@@ -150,18 +160,28 @@ workflow READS_PIPE {
 
     main:   
 	// prepare riboseq reads
-	TRIM_FIRST_BASES(riboseq_reads_ch)
+	TRIM_FIRST_BASES(
+		riboseq_reads_ch
+	)
 	
-	CLIP_READS(TRIM_FIRST_BASES.out)
+	CLIP_READS(
+		TRIM_FIRST_BASES.out.trimmed_first_bases
+	)
 	
-	TRIM_READS(CLIP_READS.out)
+	TRIM_READS(
+		CLIP_READS.out.pro_clipped
+	)
 	
-	FILTER_READS(TRIM_READS.out)
+	FILTER_READS(
+		TRIM_READS.out.pro_trimmed
+	)
 	
-	FASTQ_TO_FASTA(FILTER_READS.out)
+	FASTQ_TO_FASTA(
+		FILTER_READS.out.pro_filtered
+	)
 
     emit:
-	FASTQ_TO_FASTA.out
+	FASTQ_TO_FASTA.out.fasta
 
 }
 

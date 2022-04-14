@@ -6,14 +6,17 @@ nextflow.enable.dsl=2
 process STAR_INDEX_GENOME {
 
     label 'star'
+	label 'indexing'
 
-    publishDir "${params.map_dir}/star_index_transcriptome", mode: 'copy'
+    publishDir "${params.map_dir}/star_index_genome", mode: 'copy', pattern: 'starIndex'
+    publishDir "${params.log_dir}/star_index_genome", mode: 'copy', pattern: '*.log'
 
     input:
     path sequence
 
     output:
-    path 'starIndex'
+    path 'starIndex', emit: index
+	path '*.log', emit: log
 
     script:
     """
@@ -22,7 +25,8 @@ process STAR_INDEX_GENOME {
     STAR --runThreadN ${params.index_threads} \
     	--runMode genomeGenerate \
         --genomeDir starIndex \
-        --genomeFastaFiles ${sequence}
+        --genomeFastaFiles ${sequence} \
+		&> star_index_genome.log
 
     """
 
@@ -31,9 +35,10 @@ process STAR_INDEX_GENOME {
 process MAP_GENOME_STAR {
 
     label "star"
-    label "heavy_computation"
+	label 'mappping'
 
-    publishDir "${params.map_dir}/map_genome_star", mode: 'copy'
+    publishDir "${params.map_dir}/map_genome_star", mode: 'copy', pattern: "{*.Aligned.out.sam, *.Unmapped*}"
+    publishDir "${params.log_dir}/map_genome_star", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(reads))
@@ -43,6 +48,7 @@ process MAP_GENOME_STAR {
     output:
     path '*.Aligned.out.sam', emit: aligned
     path '*.Unmapped*', emit: unmapped
+	path '*.log', emit: log
 
     script:
     """
@@ -59,7 +65,8 @@ process MAP_GENOME_STAR {
 			--quantMode GeneCounts \
 			--readFilesIn \$VAR \
 			--outReadsUnmapped Fastx \
-			--outFileNamePrefix \${prefix}.
+			--outFileNamePrefix \${prefix}. \
+			&> \${prefix}_map_genome_star.log
 
 	: '
 		--outFilterMismatchNmax 2 \
@@ -83,7 +90,8 @@ process SAM_TO_BAM_SORT_AND_INDEX_STAR {
 
     label "samtools"
 
-    publishDir "${params.map_dir}/sam_to_bam_sort_and_index_star", mode: 'copy'
+    publishDir "${params.map_dir}/sam_to_bam_sort_and_index_star", mode: 'copy', pattern: "{*.sorted_indexed.bam, *.sorted_indexed.bam.bai, *.folder_sorted_indexed_bam}"
+    publishDir "${params.log_dir}/sam_to_bam_sort_and_index_star", mode: 'copy', pattern: '*.log'
 
     input:
     path sam
@@ -92,6 +100,7 @@ process SAM_TO_BAM_SORT_AND_INDEX_STAR {
     path '*.sorted_indexed.bam', emit: bam
     path '*.sorted_indexed.bam.bai', emit: bai
     path '*.folder_sorted_indexed_bam', emit: folder
+	path '*.log', emit: log
 
     script:
     """
@@ -101,7 +110,7 @@ process SAM_TO_BAM_SORT_AND_INDEX_STAR {
     samtools view -bS ${sam} \
         | samtools sort - > \${prefix}.sorted_indexed.bam; \
         samtools index \${prefix}.sorted_indexed.bam; \
-        2> \${prefix}_bam_sorted_and_indexed.log
+        &> \${prefix}_bam_sorted_and_indexed.log
 
     mkdir \${prefix}.folder_sorted_indexed_bam
     cp \${prefix}.sorted* \${prefix}.folder_sorted_indexed_bam
@@ -119,7 +128,10 @@ workflow GENOME_PIPE {
 
     main:   
 	// generate index for later mapping
-	genome_index = STAR_INDEX_GENOME(genome_ch)
+	STAR_INDEX_GENOME(
+		genome_ch
+	)
+	genome_index = STAR_INDEX_GENOME.out.index
 
 	// map reads to genome with star and use samtools
 	MAP_GENOME_STAR(
@@ -133,8 +145,8 @@ workflow GENOME_PIPE {
 	SAM_TO_BAM_SORT_AND_INDEX_STAR(
         star_mapped_sam
     )
-    star_mapped_unique_sorted_bam = SAM_TO_BAM_SORT_AND_INDEX_STAR.out.bam
-    star_mapped_unique_sorted_bam_bai = SAM_TO_BAM_SORT_AND_INDEX_STAR.out.bai
+    star_mapped_sortindex_bam = SAM_TO_BAM_SORT_AND_INDEX_STAR.out.bam
+    star_mapped_sortindex_bai = SAM_TO_BAM_SORT_AND_INDEX_STAR.out.bai
     bam_sort_index_folder = SAM_TO_BAM_SORT_AND_INDEX_STAR.out.folder
 
     emit:
