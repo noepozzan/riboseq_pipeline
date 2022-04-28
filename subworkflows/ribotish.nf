@@ -6,7 +6,10 @@ process RIBOTISH_QUALITY {
 
     label "ribotish"
 
-    publishDir "${params.ribotish_dir}/ribotish_quality", mode: 'copy'
+    publishDir "${params.ribotish_dir}/ribotish_quality", mode: 'copy', pattern: "*.para.py"
+	publishDir "${params.ribotish_dir}/ribotish_quality", mode: 'copy', pattern: "*.pdf"
+	publishDir "${params.ribotish_dir}/ribotish_quality", mode: 'copy', pattern: "*.txt"
+    publishDir "${params.log_dir}/ribotish_quality", mode: 'copy', pattern: "*.log"
 
     input:
     each(path(bam_sort_index_folder))
@@ -16,6 +19,7 @@ process RIBOTISH_QUALITY {
 	path '*.para.py', emit: offset
     path '*.pdf', emit: ribo_pdf
 	path '*.txt', emit: ribo_txt
+	path '*.log', emit: log
 
     script:
     if( params.riboseq_mode == "regular" )
@@ -28,7 +32,9 @@ process RIBOTISH_QUALITY {
     ribotish quality \
 		-b \${prefix}.*.bam \
 		-g ${gtf_file} \
-		--th ${params.ribotish_quality_th}
+		--th ${params.ribotish_quality_th} \
+		&> \${prefix}_ribotish_quality.log
+
     """
 	else if( params.riboseq_mode == "TI" )
 	"""
@@ -40,7 +46,9 @@ process RIBOTISH_QUALITY {
 	ribotish quality -t \
         -b \${prefix}.*.bam \
         -g ${gtf_file} \
-        --th ${params.ribotish_quality_th}
+        --th ${params.ribotish_quality_th} \
+		&> \${prefix}_ribotish_quality.log
+
 	"""
 
 }
@@ -50,9 +58,10 @@ process RIBOTISH_PREDICT {
 	echo true
 
     label "ribotish"
-    label "heavy_computation"
+	label "predicting"
 
-    publishDir "${params.ribotish_dir}/ribotish_predict", mode: 'copy'
+    publishDir "${params.ribotish_dir}/ribotish_predict", mode: 'copy', pattern: "*ribotish_pred_all.txt"
+    publishDir "${params.log_dir}/ribotish_predict", mode: 'copy', pattern: "*.log"
 
     input:
 	each(path(bam_folder_offsets))
@@ -60,7 +69,8 @@ process RIBOTISH_PREDICT {
 	path genome
  
     output:
-    path '*.ribotish_pred_all.txt', emit: ribo_pred, optional: true
+    path '*.ribotish_pred_all.txt', emit: ribo_pred
+	path '*.log', emit: log
 
     script:
 	if( params.riboseq_mode == "regular" )
@@ -104,7 +114,8 @@ process GFFREAD {
 
 	label "gffread"
 
-	publishDir "${params.ribotish_dir}/gffread", mode: 'copy'
+	publishDir "${params.ribotish_dir}/gffread", mode: 'copy', pattern: 'transcripts.fa'
+	publishDir "${params.log_dir}/gffread", mode: 'copy', pattern: '*.log'
 
 	input:
 	path genome
@@ -113,6 +124,7 @@ process GFFREAD {
 
 	output:
 	path 'transcripts.fa', emit: fasta	
+	path '*.log', emit: log
 
 	script:
 	"""
@@ -120,7 +132,8 @@ process GFFREAD {
 	gffread \
         -w transcripts.fa \
         -g ${genome} \
-        ${gtf}
+        ${gtf} \
+		&> gffread.log
 
 	"""
 
@@ -130,7 +143,8 @@ process SORF_TO_PEPTIDE {
 
 	label "sorf_to_speptide"
 
-    publishDir "${params.ribotish_dir}/sorf_to_peptide", mode: 'copy'
+    publishDir "${params.ribotish_dir}/sorf_to_peptide", mode: 'copy', pattern: '*.speptide'
+    publishDir "${params.log_dir}/sorf_to_peptide", mode: 'copy', pattern: '*.log'
 
     input:
     each(path(ribo_pred))
@@ -139,6 +153,7 @@ process SORF_TO_PEPTIDE {
 
     output:
 	path '*.speptide', emit: prediction
+	path '*.log', emit: log
 
     script:
     """
@@ -148,24 +163,25 @@ process SORF_TO_PEPTIDE {
 	python3 ${python_script} \
 		--ribo_pred ${ribo_pred} \
 		--fasta ${fasta} \
-		--out \${prefix}.speptide
-
+		--out \${prefix}.speptide \
+		&> \${prefix}_sorf_to_peptide.log
 	
 	"""
 
 }
 
 process COMBINE {
-    
+   
+	echo true 
 	label "sorf_to_speptide"
 
-    publishDir "${params.ribotish_dir}/combine", mode: 'copy'
+    publishDir "${params.ribotish_dir}/combine", mode: 'copy', pattern: 'combined_speptide*'
 
     input:
     path ribo_pred
 
     output:
-	path 'combined_speptide.txt', emit: combined_prediction
+	path 'combined_speptide*', emit: combined_prediction
 
     script:
     """
@@ -173,12 +189,13 @@ process COMBINE {
     for VAR in ${ribo_pred}
     do
 		if [ "\$WRITE_HEADER" == "true" ]; then
-	    	head -1 \$VAR > combined_speptide.txt
+	    	head -1 \$VAR > combined_speptide.fasta
 	    	WRITE_HEADER="false"
 		fi
-		tail -n +2 -q \$VAR >> combined_speptide.txt
+		tail -n +2 -q \$VAR >> combined_speptide.fasta
     done
 	
+	echo \$(pwd)
 	"""
 
 }
@@ -232,7 +249,6 @@ workflow RIBOTISH_PIPE {
 
 	emit:
 	speptide_combined
-
 
 }
 

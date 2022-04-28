@@ -2,10 +2,9 @@ nextflow.enable.dsl=2
 
 process PULL {
 
-	echo true
 	label "philosopher"
 
-	publishDir "${projectDir}/results/pull_files/pull", mode: 'copy', pattern: '{*.fai, *.gtf, *.gff3}'
+	publishDir "${projectDir}/results/pull_files/pull", mode: 'copy', pattern: "{*.fai, *.gtf, *.gff3}"
 	publishDir "${params.log_dir}/pull_files/pull", mode: 'copy', pattern: '*.log'
 
 	input:
@@ -19,14 +18,16 @@ process PULL {
 
 	script:
 	"""
-	echo \$(pwd)
+	# better idea:
+	# because the versions change all the time, just fix 1 version from the archives
+
 	# whole genome DNA fasta file
-	wget http://ftp.ensembl.org/pub/current_fasta/mus_musculus/dna/Mus_musculus.GRCm39.dna.primary_assembly.fa.gz \
+	wget http://ftp.ensembl.org/pub/release-105/fasta/mus_musculus/dna/Mus_musculus.GRCm39.dna.primary_assembly.fa.gz \
 		&> genome_fasta.log
 	# gff3 annotation files of noncoding RNA and mRNA
-	wget http://ftp.ebi.ac.uk/pub/databases/RNAcentral/current_release/genome_coordinates/gff3/mus_musculus.GRCm39.gff3.gz \
+	wget http://ftp.ebi.ac.uk/pub/databases/RNAcentral/releases/20.0/genome_coordinates/gff3/mus_musculus.GRCm39.gff3.gz \
 		&> ncRNA_annotation.log
-	wget http://ftp.ensembl.org/pub/current_gtf/mus_musculus/Mus_musculus.GRCm39.105.chr.gtf.gz \
+	wget http://ftp.ensembl.org/pub/release-105/gtf/mus_musculus/Mus_musculus.GRCm39.105.chr.gtf.gz \
 		&> mRNA_annotation.log
 
 	# decompress files
@@ -34,7 +35,7 @@ process PULL {
 	zcat mus_musculus.GRCm39.gff3.gz > mus_musculus.GRCm39.gff3
 	zcat Mus_musculus.GRCm39.105.chr.gtf.gz > Mus_musculus.GRCm39.105.chr.gtf
 
-	cp *.fa *.gtf *.gff3 ${dir}
+	# cp *.fa *.gtf *.gff3 ${dir}
 	"""
 
 
@@ -70,20 +71,23 @@ process GFFREAD {
 
 	label "gffread"
 
-	publishDir "${projectDir}/results/pull_files/gffread", mode: 'copy', pattern: ''
+	publishDir "${projectDir}/results/pull_files/gffread", mode: 'copy', pattern: '*.gtf'
 	publishDir "${params.log_dir}/gffread", mode: 'copy', pattern: '*.log'
 
 	input:
 	path gff3
 
 	output:
-	path "", emit: gtf
+	path "*.gtf", emit: gtf
 	path "*.log", emit: log
 
 	script:
 	"""
 	input=\$(basename ${gff3})
     prefix=\$(echo \$input | cut -d '.' -f 1,2)
+
+	echo \$(pwd) > esel.txt
+	cp esel.txt ~/riboseq_pipeline
 
 	gffread ${gff3} \
 		-T \
@@ -97,7 +101,7 @@ process CONCAT {
 
 	label "gffread"
 
-	publishDir "${projectDir}/results/pull_files/concat", mode: 'copy', pattern: ''
+	publishDir "${projectDir}/results/pull_files/concat", mode: 'copy', pattern: 'combined.gtf'
     publishDir "${params.log_dir}/concat", mode: 'copy', pattern: '*.log' 
 
 	input:
@@ -118,8 +122,7 @@ process MOVE {
 
 	label "philosopher"
 
-	publishDir "${projectDir}/results/pull_files/move", mode: 'copy', pattern: ''
-	publishDir "${params.log_dir}/move", mode: 'copy', pattern: ''
+	publishDir "${projectDir}/results/pull_files/move", mode: 'copy', pattern: '*'
 
 	input:
 	path genome_fasta
@@ -127,8 +130,6 @@ process MOVE {
 	path gene_gtf
 	path noncoding_gtf
 	path combined_gtf
-
-	output:
 
 	script:
 	"""

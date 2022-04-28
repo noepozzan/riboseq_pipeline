@@ -33,7 +33,8 @@ process MAP_rRNA_SEGEMEHL {
     label "segemehl"
 	label 'mapping'
 
-    publishDir "${params.map_dir}/map_rrna_segemehl", mode: 'copy', pattern: "{*.other_genes_mapped_sam, *.other_genes_unmapped}"
+    publishDir "${params.map_dir}/map_rrna_segemehl", mode: 'copy', pattern: "*.other_genes_mapped_sam"
+	publishDir "${params.map_dir}/map_rrna_segemehl", mode: 'copy', pattern: "*.other_genes_unmapped"
     publishDir "${params.log_dir}/map_rrna_segemehl", mode: 'copy', pattern: '*.log'
 
     input:

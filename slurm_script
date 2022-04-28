@@ -18,7 +18,7 @@
 
 nextflow run \
 	main.nf \
-	-profile slurm_offline \
+	-profile full,slurm_offline \
 	-resume \
 	--notification true //\
 	//--riboseq_reads /path/to/reads \

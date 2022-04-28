@@ -37,7 +37,8 @@ process MAP_GENOME_STAR {
     label "star"
 	label 'mappping'
 
-    publishDir "${params.map_dir}/map_genome_star", mode: 'copy', pattern: "{*.Aligned.out.sam, *.Unmapped*}"
+    publishDir "${params.map_dir}/map_genome_star", mode: 'copy', pattern: "*.Aligned.out.sam"
+	publishDir "${params.map_dir}/map_genome_star", mode: 'copy', pattern: "*.Unmapped*"
     publishDir "${params.log_dir}/map_genome_star", mode: 'copy', pattern: '*.log'
 
     input:
@@ -90,7 +91,9 @@ process SAM_TO_BAM_SORT_AND_INDEX_STAR {
 
     label "samtools"
 
-    publishDir "${params.map_dir}/sam_to_bam_sort_and_index_star", mode: 'copy', pattern: "{*.sorted_indexed.bam, *.sorted_indexed.bam.bai, *.folder_sorted_indexed_bam}"
+    publishDir "${params.map_dir}/sam_to_bam_sort_and_index_star", mode: 'copy', pattern: "*.sorted_indexed.bam"
+	publishDir "${params.map_dir}/sam_to_bam_sort_and_index_star", mode: 'copy', pattern: "*.sorted_indexed.bam.bai"
+	publishDir "${params.map_dir}/sam_to_bam_sort_and_index_star", mode: 'copy', pattern: "*.folder_sorted_indexed_bam"
     publishDir "${params.log_dir}/sam_to_bam_sort_and_index_star", mode: 'copy', pattern: '*.log'
 
     input:

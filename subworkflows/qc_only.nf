@@ -184,7 +184,9 @@ process CHECK_PERIODICITY {
 
     label "rcrunch_python"
 
-    publishDir "${params.qc_dir}/check_periodicity", mode: 'copy', pattern: '{*.periodicity_start.pdf, *.periodicity_stop.pdf, *.Periodicity_Analysis_Start_Ribo_Seq.txt}'
+    publishDir "${params.qc_dir}/check_periodicity", mode: 'copy', pattern: '*.periodicity_start.pdf'
+	publishDir "${params.qc_dir}/check_periodicity", mode: 'copy', pattern: '*.periodicity_stop.pdf'
+	publishDir "${params.qc_dir}/check_periodicity", mode: 'copy', pattern: '*.Periodicity_Analysis_Start_Ribo_Seq.txt'
     publishDir "${params.log_dir}/check_periodicity", mode: 'copy', pattern: '*.log'
 
     input:
@@ -261,7 +263,9 @@ process BAM_SORT_AND_INDEX {
     
     label "samtools"
 
-    publishDir "${params.qc_dir}/bam_sort_and_index", mode: 'copy', pattern: '{*.bam, *.bam.bai, *.bam_sort_index}'
+    publishDir "${params.qc_dir}/bam_sort_and_index", mode: 'copy', pattern: '*.bam'
+	publishDir "${params.qc_dir}/bam_sort_and_index", mode: 'copy', pattern: '*.bam.bai'
+	publishDir "${params.qc_dir}/bam_sort_and_index", mode: 'copy', pattern: '*.bam_sort_index'
     publishDir "${params.log_dir}/bam_sort_and_index", mode: 'copy', pattern: '*.log'
 
     input:

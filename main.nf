@@ -16,6 +16,7 @@ include { QC_ONLY_PIPE } from './subworkflows/qc_only.nf'
 include { FIX_NAMES } from './subworkflows/fix_names.nf'
 include { PULLFILES } from './subworkflows/pull_files.nf'
 include { RAWMZML } from './subworkflows/raw_to_mzml.nf'
+include { MAKE_TEST_FILES } from './subworkflows/make_test_files.nf'
 
 // check_files channels
 check_files_script_ch = Channel.fromPath(params.check_files_script)
@@ -87,6 +88,24 @@ workflow MAP_NAMES {
 
 }
 
+workflow TEST_FILES {
+
+	n_test_lines = channel.from("1000")
+	out_path = channel.fromPath("${projectDir}/data/test_riboseq")
+
+	MAKE_TEST_FILES(
+		n_test_lines,
+		riboseq_reads_ch,
+		out_path,
+		gtf_ch,
+		genome_ch
+	)
+	riboseq_reads_ch = MAKE_TEST_FILES.out.riboseq_test
+	gtf_ch = MAKE_TEST_FILES.out.gtf_test
+	genome_ch = MAKE_TEST_FILES.out.genome_test
+	genome_fai_ch = MAKE_TEST_FILES.out.fai_test
+}
+
 workflow CHECK_FILES {
 
     CHECK_FILES_PIPE(
@@ -103,10 +122,10 @@ workflow CHECK_FILES {
 
 workflow RIBOTISH {
 
-	verga = Channel.fromPath("${projectDir}/data/verga/*", type: 'dir')
+	bam_folder = Channel.fromPath("${projectDir}/results/full/map/sam_to_bam_sort_and_index_star/*_bam", type: 'dir')
 	RIBOTISH_PIPE(
         gtf_ch,
-        verga,
+        bam_folder,
         genome_ch,
         genome_fai_ch,
 
@@ -134,47 +153,58 @@ workflow {
 	)
 
 	if ( params.run_qc == true ){
-	ANNOTATE_PIPE(
-        gtf_ch,
-        other_RNAs_sequence_ch,
-        genome_ch,
-    )
 
-	TRANSCRIPTOME_PIPE(
-		ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_fa,
-		rRNA_PIPE.out.other_genes_unmapped_fasta
-	)
+		ANNOTATE_PIPE(
+			gtf_ch,
+			other_RNAs_sequence_ch,
+			genome_ch,
+		)
+
+		TRANSCRIPTOME_PIPE(
+			ANNOTATE_PIPE.out.longest_pc_transcript_per_gene_fa,
+			rRNA_PIPE.out.other_genes_unmapped_fasta
+		)
+
+		QC_ONLY_PIPE(
+			oligos_ch,
+			ANNOTATE_PIPE.out.transcript_id_gene_id_CDS_tsv,
+			TRANSCRIPTOME_PIPE.out.transcripts_mapped_unique_sam,
+			TRANSCRIPTOME_PIPE.out.bam_bai_folder,
+			rRNA_PIPE.out.other_genes_mapped_sam
+		)
+
+	}
 	
-	QC_ONLY_PIPE(
-		oligos_ch,
-		ANNOTATE_PIPE.out.transcript_id_gene_id_CDS_tsv,
-		TRANSCRIPTOME_PIPE.out.transcripts_mapped_unique_sam,
-		TRANSCRIPTOME_PIPE.out.bam_bai_folder,
-		rRNA_PIPE.out.other_genes_mapped_sam
-	)
+	if (params.run_mode == "full") {
+		RIBOTISH_PIPE(
+			gtf_ch,
+			GENOME_PIPE.out,
+			genome_ch,
+			genome_fai_ch,
+		
+		)
+		predicted_peptides = RIBOTISH_PIPE.out.speptide_combined
 	}
 
-	RIBOTISH_PIPE(
-        gtf_ch,
-        GENOME_PIPE.out,
-        genome_ch,
-        genome_fai_ch,
-
-    )
+	if (params.run_mode == "test") {
+		predicted_peptides = channel.fromPath(params.test_database)
+	}
 
     PHILOSOPHER(
-        RIBOTISH_PIPE.out.speptide_combined,
+        predicted_peptides,
         proteomics_reads_ch
     )
+
 /*
 	PHILOSOPHER_PARALLEL(
 		//PHILOSOPHER.out.ionquant,
 		PHILOSOPHER.out.report,
 		PHILOSOPHER.out.msfragger_params,
-		RIBOTISH_PIPE.out.speptide_combined,
+		predicted_speptides,
         proteomics_reads_ch		
 	)
 */
+
 }
 
 workflow MOCK {
@@ -185,6 +215,7 @@ workflow MOCK {
         speptide_fasta,
 		proteomics_reads_ch
     )
+	/*
 	PHILOSOPHER_PARALLEL(
         PHILOSOPHER.out.report,
         PHILOSOPHER.out.msfragger_params,
@@ -192,7 +223,7 @@ workflow MOCK {
         speptide_fasta,
 		proteomics_reads_ch
     )
-
+	*/
 }
 
 

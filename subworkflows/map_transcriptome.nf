@@ -34,7 +34,8 @@ process MAP_TRANSCRIPTOME_SEGEMEHL {
     label "segemehl"
 	label 'mapping'
 
-    publishDir "${params.map_dir}/map_transcriptome_segemehl", mode: 'copy', pattern: "{*.transcripts_mapped_sam, *.transcripts_unmapped_fa}"
+    publishDir "${params.map_dir}/map_transcriptome_segemehl", mode: 'copy', pattern: "*.transcripts_mapped_sam"
+	publishDir "${params.map_dir}/map_transcriptome_segemehl", mode: 'copy', pattern: "*.transcripts_unmapped_fa"
     publishDir "${params.log_dir}/map_transcriptome_segemehl", mode: 'copy', pattern: '*.log'
 
     input:
@@ -97,7 +98,9 @@ process SAM_TO_BAM_SORT_AND_INDEX {
     
     label "samtools"
 
-    publishDir "${params.map_dir}/sam_to_bam_sort_and_index", mode: 'copy', pattern: '{*.sorted_indexed.bam, *.sorted_indexed.bam.bai, *.folder_sorted_indexed_bam}'
+    publishDir "${params.map_dir}/sam_to_bam_sort_and_index", mode: 'copy', pattern: "*.sorted_indexed.bam"
+	publishDir "${params.map_dir}/sam_to_bam_sort_and_index", mode: 'copy', pattern: "*.sorted_indexed.bam.bai"
+	publishDir "${params.map_dir}/sam_to_bam_sort_and_index", mode: 'copy', pattern: "*.folder_sorted_indexed_bam"
     publishDir "${params.log_dir}/sam_to_bam_sort_and_index", mode: 'copy', pattern: '*.log'
 
     input:

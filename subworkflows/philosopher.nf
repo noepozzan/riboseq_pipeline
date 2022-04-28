@@ -24,14 +24,13 @@ process WORKSPACE {
 
 	parent_dir=${params.proteomics_reads}
     parentdir="\$(dirname "\$parent_dir")"
-	
-	cp -R -n -p \$parentdir/*.mzML ${params.workspace}/
-	cp -R -n -p ${ribotish_speptide} ${params.workspace}/
 
+	cp -R -n -p ${params.proteomics_reads} ${params.workspace}
+	cp ${ribotish_speptide} ${params.workspace}
+	
 	cd ${params.workspace}	
 	philosopher workspace --clean
 	philosopher workspace --init
-	
 	"""
 
 }
@@ -40,7 +39,7 @@ process DATABASE {
 
     label 'philosopher'
     
-    publishDir "${params.philosopher_dir}/database", mode: 'copy', pattern: '*.fas'
+    publishDir "${params.philosopher_dir}/database", mode: 'copy', pattern: '*.fas*'
     publishDir "${params.log_dir}/database", mode: 'copy', pattern: '*.log'
 
     input:
@@ -48,7 +47,7 @@ process DATABASE {
     path db
 
     output:
-    path '*.fas', emit: fas
+    path '*.fas*', emit: fas
 	path '*.log', emit: log
 
     script:
@@ -59,14 +58,14 @@ process DATABASE {
 	# then copy the generated output files back to
 	# nextflow directory to allow nextflow to track files
 	cd ${params.workspace}
-
+	#philosopher workspace --init
 	philosopher database \
 		--custom ${db} \
-		--contam \
+		--contam \	
 		&> database.log
 	
-    cp -R -n -p *.fas database.log \$workd
-
+    #cp -R -n -p *.fas database.log \$workd
+	cp -R -n -p *-${db}* database.log \$workd
 	"""
 
 }
@@ -284,7 +283,7 @@ process FILTER_FDR {
 
 process FREEQUANT {
 
-    label "philosopher2"
+    label "philosopher"
     
 	publishDir "${params.philosopher_dir}/freequant", mode: 'copy', pattern: 'freequant_done'
     publishDir "${params.log_dir}/freequant", mode: 'copy', pattern: '*.log'
@@ -315,7 +314,8 @@ process REPORT {
 
     label "philosopher"
 
-    publishDir "${params.philosopher_dir}/report", mode: 'copy', pattern: '{msstats.csv, *.tsv}'
+    publishDir "${params.philosopher_dir}/report", mode: 'copy', pattern: 'msstats.csv'
+	publishDir "${params.philosopher_dir}/report", mode: 'copy', pattern: '*.tsv'
     publishDir "${params.log_dir}/report", mode: 'copy', pattern: '*.log'
 
     input:
@@ -353,7 +353,7 @@ process IONQUANT {
     publishDir "${params.log_dir}/ionquant", mode: 'copy', pattern: '*.log'
 
     input:
-    val filter_fdr
+    val report
 	path pepXML
 
     output:
@@ -449,7 +449,7 @@ workflow PHILOSOPHER {
 	)
 
 	IONQUANT(
-        FILTER_FDR.out.filter_done,
+        REPORT.out.msstats,
         MSFRAGGER.out.pepXML
     )
 
